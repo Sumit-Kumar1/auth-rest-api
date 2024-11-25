@@ -2,9 +2,9 @@ package handler
 
 import (
 	"auth-rest-api/internal/models"
+	"auth-rest-api/internal/server"
 	"context"
 	"encoding/json"
-	"io"
 	"log/slog"
 	"net/http"
 )
@@ -25,20 +25,13 @@ func New(s Servicer) *Handler {
 
 func (h *Handler) SignIn(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	logger := ctx.Value("logger").(*slog.Logger)
+	logger := ctx.Value(server.Logger).(*slog.Logger)
 
 	var u models.UserReq
 
-	data, err := io.ReadAll(r.Body)
-	if err != nil {
-		http.Error(w, "Failed to read body", http.StatusBadRequest)
-		logger.LogAttrs(ctx, slog.LevelError, "Failed to read body", slog.Any("error", err.Error()))
-		return
-	}
-
-	if err := json.Unmarshal(data, &u); err != nil {
+	if err := json.NewDecoder(r.Body).Decode(&u); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
-		logger.LogAttrs(ctx, slog.LevelError, "failed to unmarshal body", slog.Any("error", err.Error()))
+		logger.LogAttrs(ctx, slog.LevelError, "failed to bind body", slog.String("error", err.Error()))
 		return
 	}
 
@@ -58,20 +51,13 @@ func (h *Handler) SignIn(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) SignUp(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	logger := ctx.Value("logger").(*slog.Logger)
+	logger := ctx.Value(server.Logger).(*slog.Logger)
 
 	var u models.UserReq
 
-	data, err := io.ReadAll(r.Body)
-	if err != nil {
-		http.Error(w, "Failed to read body", http.StatusBadRequest)
-		logger.LogAttrs(ctx, slog.LevelError, "Failed to read body", slog.Any("error", err.Error()))
-		return
-	}
-
-	if err := json.Unmarshal(data, &u); err != nil {
+	if err := json.NewDecoder(r.Body).Decode(&u); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
-		logger.LogAttrs(ctx, slog.LevelError, "failed to unmarshal body", slog.Any("error", err.Error()))
+		logger.LogAttrs(ctx, slog.LevelError, "failed to bind body", slog.String("error", err.Error()))
 		return
 	}
 
@@ -88,6 +74,6 @@ func (h *Handler) SignUp(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (h *Handler) RefreshToken(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) RefreshToken(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
