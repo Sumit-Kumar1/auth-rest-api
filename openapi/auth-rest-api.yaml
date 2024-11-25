@@ -1,0 +1,95 @@
+openapi: 3.1.0
+info:
+  title: auth-rest-api
+  description: This is a basic JWT based auth API which supports user - signIn, signUp and refresh of user token.
+  version: 1.0.0
+servers:
+  - url: 'http://localhost:9001'
+paths:
+  /signin:
+    post:
+      tags:
+        - User
+      summary: enable user to register and generate token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/User"
+      responses:
+        201:
+          description: user registered successfully
+          content:
+            application/json:
+              schema:
+                $ref : "#/components/schemas/SignResp"
+        404:
+          description: bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/error"
+                example:
+                  code: 404
+                  message: "invalid password length"
+        500:
+          description: internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/error"
+                example:
+                  code: 500
+                  message: "not able to unmarshall request body"
+
+
+
+
+components:
+  schemas:
+    User:
+      type: object
+      properties:
+        email:
+          type: string
+          description: "a valid user email address"
+          example: "sumit@kumar.com"
+        password:
+            type: string
+            description: "a minimum of 8 character long password"
+            example: "sumit@kumar"
+      required:
+        - email
+        - password
+    SignResp:
+      type: object
+      properties:
+        email:
+          type: string
+          example: "sumit@kumar.com"
+        token:
+          type: string
+          example: ""
+
+    error:
+      type: object
+      properties:
+        code:
+          type: int
+        message:
+          type: string
+    healthResp:
+      type: object
+      properties:
+        service:
+          type: string
+        database:
+            type: string
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  
