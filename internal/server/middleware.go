@@ -2,8 +2,12 @@ package server
 
 import (
 	"context"
+	"encoding/json"
+	"github.com/golang-jwt/jwt/v5"
 	"log/slog"
 	"net/http"
+	"os"
+	"strings"
 
 	"github.com/google/uuid"
 )
@@ -35,6 +39,7 @@ func AddCorrelation() Middleware {
 				slog.String("method", r.Method),
 				slog.String("path", r.URL.Path),
 				slog.String("host", r.Host),
+				slog.String("remote-addr", r.RemoteAddr),
 			))
 
 			ctx := context.WithValue(r.Context(), Logger, logger)
@@ -42,4 +47,37 @@ func AddCorrelation() Middleware {
 			f(w, r.WithContext(context.WithValue(ctx, CorrelationID, corrID)))
 		}
 	}
+}
+
+func AuthMiddleware() Middleware {
+	return func(f http.HandlerFunc) http.HandlerFunc {
+		return func(w http.ResponseWriter, r *http.Request) {
+			authHeader := r.Header.Get("Authorization")
+			if authHeader == "" {
+				http.Error(w, "Unauthorized", http.StatusUnauthorized)
+				return
+			}
+
+			tokenString := strings.TrimPrefix(authHeader, "Bearer ")
+
+			token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+				return getJWTSecret(), nil
+			})
+			if err != nil || !token.Valid {
+				http.Error(w, "Invalid token", http.StatusUnauthorized)
+				return
+			}
+
+			f(w, r)
+		}
+	}
+}
+
+func getJWTSecret() []byte {
+	secret := os.Getenv("JWT_SECRET")
+	if secret == "" {
+		return json.RawMessage("my_secret_key")
+	}
+
+	return json.RawMessage(secret)
 }
