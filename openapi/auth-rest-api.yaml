@@ -1,16 +1,18 @@
-openapi: 3.1.0
+openapi: 3.0.2
 info:
   title: auth-rest-api
   description: This is a basic JWT based auth API which supports user - signIn, signUp and refresh of user token.
   version: 1.0.0
+
 servers:
-  - url: 'http://localhost:9001'
+  - url: "http://localhost:9001"
+
 paths:
-  /signin:
+  /signup:
     post:
       tags:
         - User
-      summary: enable user to register and generate token
+      summary: enable user to register
       requestBody:
         required: true
         content:
@@ -19,11 +21,7 @@ paths:
               $ref: "#/components/schemas/User"
       responses:
         201:
-          description: user registered successfully
-          content:
-            application/json:
-              schema:
-                $ref : "#/components/schemas/SignResp"
+          description: user created successfully
         404:
           description: bad request
           content:
@@ -43,9 +41,122 @@ paths:
                   code: 500
                   message: "not able to unmarshall request body"
 
+  /signin:
+    post:
+      tags:
+        - User
+      summary: enable user to login and generate tokens
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/User"
+      responses:
+        201:
+          description: user login successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SignResp"
+        404:
+          description: bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/error"
+                example:
+                  code: 404
+                  message: "invalid password length"
+        500:
+          description: internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/error"
+                example:
+                  code: 500
+                  message: "not able to unmarshall request body"
+                  
+  /refresh:
+    post:
+      tags:
+        - User
+      summary: enable user to login and generate tokens
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/refreshToken"
+      responses:
+        201:
+          description: user login successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SignResp"
+        404:
+          description: bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/error"
+                example:
+                  code: 404
+                  message: "invalid password length"
+        500:
+          description: internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/error"
+                example:
+                  code: 500
+                  message: "not able to unmarshall request body"
 
+  /revoke:
+    post:
+      tags:
+        - User
+      summary: enable user to login and generate tokens
+      security:
+        - bearerAuth : []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/User"
+      responses:
+        201:
+          description: user login successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SignResp"
+        404:
+          description: bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/error"
+                example:
+                  code: 404
+                  message: "invalid password length"
+        500:
+          description: internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/error"
+                example:
+                  code: 500
+                  message: "not able to unmarshall request body"
 
-
+  
 components:
   schemas:
     User:
@@ -56,19 +167,23 @@ components:
           description: "a valid user email address"
           example: "sumit@kumar.com"
         password:
-            type: string
-            description: "a minimum of 8 character long password"
-            example: "sumit@kumar"
+          type: string
+          description: "a minimum of 8 character long password"
+          example: "sumit@kumar"
       required:
         - email
         - password
+
     SignResp:
       type: object
       properties:
         email:
           type: string
           example: "sumit@kumar.com"
-        token:
+        accessToken:
+          type: string
+          example: ""
+        refreshToken:
           type: string
           example: ""
 
@@ -76,20 +191,27 @@ components:
       type: object
       properties:
         code:
-          type: int
+          type: integer
         message:
           type: string
+
+    refreshToken:
+      type: object
+      properties:
+        refreshToken:
+          type: string
+          example: ""
+
     healthResp:
       type: object
       properties:
         service:
           type: string
         database:
-            type: string
-  securitySchemes:
+          type: string
+
+  securitySchemes: 
     bearerAuth:
       type: http
       scheme: bearer
       bearerFormat: JWT
-
-  
