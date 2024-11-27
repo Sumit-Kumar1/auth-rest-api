@@ -23,8 +23,17 @@ func New(db *redis.Client) *Store {
 }
 
 func (s *Store) CreateUser(ctx context.Context, user *models.UserData) error {
-	if err := s.DB.HSet(ctx, userTable, user.Email, user.Password).Err(); err != nil {
+	val, err := s.DB.HSet(ctx, userTable, user.Email, user.Password).Result()
+	if err != nil {
+		if errors.Is(err, redis.Nil) {
+			return models.ErrUserAlreadyExists
+		}
+
 		return err
+	}
+
+	if val == 0 {
+		return models.ErrUserAlreadyExists
 	}
 
 	return nil
@@ -68,8 +77,8 @@ func (s *Store) DeleteToken(ctx context.Context, tokenID ...string) error {
 		return err
 	}
 
-	if val == 0 {
-		return models.ErrNotFound("not able to delete the provided entry")
+	if val != int64(len(tokenID)) {
+		return models.NewConstError("delete error")
 	}
 
 	return nil
