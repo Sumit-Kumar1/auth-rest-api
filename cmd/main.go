@@ -60,7 +60,7 @@ func newHTTPHandler(app *server.Server) {
 
 	app.Mux.HandleFunc("POST /signup", server.Chain(h.SignUp, server.AddCorrelation()))
 	app.Mux.HandleFunc("POST /signin", server.Chain(h.SignIn, server.AddCorrelation()))
-	app.Mux.HandleFunc("POST /refresh", server.Chain(h.RefreshToken, server.AddCorrelation()))
+	app.Mux.HandleFunc("POST /refresh", server.Chain(h.RefreshToken, server.AddCorrelation(), server.AuthMiddleware()))
 	app.Mux.HandleFunc("POST /revoke", server.Chain(h.RevokeToken, server.AddCorrelation(), server.AuthMiddleware()))
 
 	app.Mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
