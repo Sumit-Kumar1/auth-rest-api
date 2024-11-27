@@ -1,7 +1,6 @@
 package models
 
 import (
-	"errors"
 	"regexp"
 	"strings"
 )
@@ -12,30 +11,52 @@ type UserReq struct {
 }
 
 type UserResp struct {
-	Email string `json:"email"`
-	Token string `json:"token"`
+	Email        string `json:"email,omitempty"`
+	AccessToken  string `json:"accessToken,omitempty"`
+	RefreshToken string `json:"refreshToken,omitempty"`
+}
+
+type UserData struct {
+	Email    string `json:"email"`
+	Password []byte `json:"-"`
 }
 
 func (u *UserReq) Validate() error {
-	email := strings.ToLower(strings.TrimSpace(u.Email))
-	passwd := strings.TrimSpace(u.Password)
+	if err := ValidateEmail(u.Email); err != nil {
+		return err
+	}
 
+	if err := validatePassword(u.Password); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func ValidateEmail(email string) error {
+	email = strings.ToLower(strings.TrimSpace(email))
 	emailRegex := regexp.MustCompile(`^[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,4}$`)
 
 	if email == "" {
-		return errors.New("email is required")
+		return ErrRequired("email")
 	}
 
 	if !emailRegex.MatchString(email) {
-		return errors.New("invalid email")
+		return ErrInvalid("email")
 	}
 
+	return nil
+}
+
+func validatePassword(password string) error {
+	passwd := strings.TrimSpace(password)
+
 	if passwd == "" {
-		return errors.New("password is required")
+		return ErrRequired("password")
 	}
 
 	if len(passwd) < 8 {
-		return errors.New("password is too short")
+		return ErrInvalid("password")
 	}
 
 	return nil
