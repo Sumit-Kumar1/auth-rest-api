@@ -20,7 +20,7 @@ func main() {
 
 	app, err := server.ServerFromEnvs()
 	if err != nil {
-		app.Logger.LogAttrs(ctx, slog.LevelError, "failed to create server", slog.Any("error", err))
+		slog.LogAttrs(ctx, slog.LevelError, "failed to create server", slog.Any("error", err))
 		return
 	}
 
@@ -54,13 +54,14 @@ func main() {
 }
 
 func newHTTPHandler(app *server.Server) {
-	st := store.New(app.DB)
+	st := store.New(app.DB.Client)
 	svc := service.New(st)
 	h := handler.New(svc)
 
-	app.Mux.HandleFunc("POST /signin", server.Chain(h.SignIn, server.AddCorrelation()))
 	app.Mux.HandleFunc("POST /signup", server.Chain(h.SignUp, server.AddCorrelation()))
+	app.Mux.HandleFunc("POST /signin", server.Chain(h.SignIn, server.AddCorrelation()))
 	app.Mux.HandleFunc("POST /refresh", server.Chain(h.RefreshToken, server.AddCorrelation()))
+	app.Mux.HandleFunc("POST /revoke", server.Chain(h.RevokeToken, server.AddCorrelation(), server.AuthMiddleware()))
 
 	app.Mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
