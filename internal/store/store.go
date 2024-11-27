@@ -51,11 +51,11 @@ func (s *Store) CreateToken(ctx context.Context, email string, td *models.TokenD
 	accExp := time.Unix(td.AccessExpiresAt, 0)
 	refExp := time.Unix(td.RefreshExpiresAt, 0)
 
-	if err := s.DB.Set(ctx, td.AccessID, email, accExp.Sub(time.Now())).Err(); err != nil {
+	if err := s.DB.Set(ctx, td.AccessID, email, time.Until(accExp)).Err(); err != nil {
 		return err
 	}
 
-	if err := s.DB.Set(ctx, td.RefreshID, email, refExp.Sub(time.Now())).Err(); err != nil {
+	if err := s.DB.Set(ctx, td.RefreshID, email, time.Until(refExp)).Err(); err != nil {
 		return err
 	}
 
