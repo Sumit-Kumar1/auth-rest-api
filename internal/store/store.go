@@ -74,3 +74,20 @@ func (s *Store) DeleteToken(ctx context.Context, tokenID ...string) error {
 
 	return nil
 }
+
+func (s *Store) IsTokenRevoked(ctx context.Context, tokenID string) (bool, error) {
+	val, err := s.DB.Exists(ctx, tokenID).Result()
+	if err != nil {
+		if errors.Is(err, redis.Nil) {
+			return true, nil
+		}
+
+		return false, err
+	}
+
+	if val > 0 {
+		return false, nil
+	}
+
+	return true, nil
+}

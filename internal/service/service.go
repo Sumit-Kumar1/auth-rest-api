@@ -12,8 +12,11 @@ import (
 )
 
 type Storer interface {
+	// User
 	CreateUser(ctx context.Context, u *models.UserData) error
 	GetUserByEmail(ctx context.Context, email string) (*models.UserData, error)
+	// Token
+	IsTokenRevoked(ctx context.Context, tokenID string) (bool, error)
 	CreateToken(ctx context.Context, email string, td *models.TokenData) error
 	DeleteToken(ctx context.Context, tokenID ...string) error
 }
@@ -113,12 +116,21 @@ func (s *Service) RefreshToken(ctx context.Context, accessToken, refreshToken st
 		return "", "", err
 	}
 
+	// check if token is revoked
+	isRevoked, err := s.Store.IsTokenRevoked(ctx, accClaims.ClaimUID)
+	if err != nil {
+		return "", "", err
+	}
+
+	if isRevoked {
+		return "", "", models.ErrTokenRevoked
+	}
+
 	// Deleting old active tokens
 	if delErr := s.Store.DeleteToken(ctx, accClaims.ClaimUID, refClaims.ClaimUID); delErr != nil {
 		return "", "", delErr
 	}
 
-	// generate new tokens for that email
 	td, err := GenerateToken(accClaims.Email)
 	if err != nil {
 		return "", "", err
