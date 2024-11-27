@@ -154,6 +154,7 @@ func (h *Handler) RevokeToken(w http.ResponseWriter, r *http.Request) {
 	token := strings.TrimPrefix(authHeader, "Bearer ")
 
 	if err := h.Service.RevokeToken(ctx, token); err != nil {
+		logger.LogAttrs(ctx, slog.LevelError, "failed to revoke token", slog.String("error", err.Error()))
 		respondWithError(w, http.StatusInternalServerError, "Failed to revoke token")
 		return
 	}
