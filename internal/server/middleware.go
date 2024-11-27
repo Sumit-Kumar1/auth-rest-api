@@ -3,12 +3,12 @@ package server
 import (
 	"context"
 	"encoding/json"
-	"github.com/golang-jwt/jwt/v5"
 	"log/slog"
 	"net/http"
 	"os"
 	"strings"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 )
 
@@ -60,10 +60,11 @@ func AuthMiddleware() Middleware {
 
 			tokenString := strings.TrimPrefix(authHeader, "Bearer ")
 
-			token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+			token, err := jwt.Parse(tokenString, func(_ *jwt.Token) (any, error) {
 				return getJWTSecret(), nil
 			})
 			if err != nil || !token.Valid {
+				slog.Log(context.Background(), slog.LevelError, "invalid token", slog.String("token", tokenString))
 				http.Error(w, "Invalid token", http.StatusUnauthorized)
 				return
 			}
@@ -74,7 +75,7 @@ func AuthMiddleware() Middleware {
 }
 
 func getJWTSecret() []byte {
-	secret := os.Getenv("JWT_SECRET")
+	secret := os.Getenv("ACCESS_SECRET")
 	if secret == "" {
 		return json.RawMessage("my_secret_key")
 	}
