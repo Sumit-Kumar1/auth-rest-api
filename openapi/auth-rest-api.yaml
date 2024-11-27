@@ -23,23 +23,41 @@ paths:
         201:
           description: user created successfully
         404:
-          description: bad request
+          description: Bad Request
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/error"
-                example:
-                  code: 404
-                  message: "invalid password length"
+                properties:
+                  code:
+                    type: integer
+                    example: 404
+                  message: 
+                    type: string
+                    example: "Unable to signup - invalid password"
+        409:
+          description: Status Conflict
+          content:
+            application/json:
+              schema:
+                properties:
+                  code:
+                    type: integer
+                    example: 409
+                  message: 
+                    type: string
+                    example: "user already exist - sumit@kumar.com"
         500:
           description: internal server error
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/error"
-                example:
-                  code: 500
-                  message: "not able to unmarshall request body"
+                properties:
+                  code: 
+                    type: integer
+                    example: 500
+                  message:
+                    type: string
+                    example: "Not able to unmarshall body"
 
   /signin:
     post:
@@ -64,19 +82,25 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/error"
-                example:
-                  code: 404
-                  message: "invalid password length"
+                properties:
+                  code: 
+                    type: integer
+                    example: 404
+                  message:
+                    type: string
+                    example: "unable to signIn - invalid email"
         500:
           description: internal server error
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/error"
-                example:
-                  code: 500
-                  message: "not able to unmarshall request body"
+                properties:
+                  code: 
+                    type: integer
+                    example: 500
+                  message:
+                    type: string
+                    example: "Not able to unmarshall body"
                   
   /refresh:
     post:
@@ -85,37 +109,50 @@ paths:
       summary: enable user to login and generate tokens
       security:
         - bearerAuth: []
+      parameters:
+        - in: header
+          name: Authorization
+          required: true
+          schema:
+            type: string
+            example: "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6InN1bWl0QGt1bWFyLmNvbSIsImNsYWltSUQiOiIxNDExNzcyYi1jOTU1LTQ1MzUtOTNlMi1hYmIyNGVkM2I5NjUiLCJpc3MiOiJzdW1pdCBrdW1hciIsInN1YiI6InN1bWl0QGt1bWFyLmNvbSIsImV4cCI6MTczMjY5NTcwNSwibmJmIjoxNzMyNjk0ODA1LCJpYXQiOjE3MzI2OTQ4MDUsImp0aSI6IjEifQ.Jm-_fvwk3tIWZHsm9faOzSDVlRdCOkBTsUCmpZ_HIgE"
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/refreshToken"
+              $ref: "#/components/schemas/refreshTokenReq"
       responses:
         201:
           description: user login successfully
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/SignResp"
-        404:
+                $ref: "#/components/schemas/refreshTokenResp"
+        401:
           description: bad request
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/error"
-                example:
-                  code: 404
-                  message: "invalid password length"
+                properties:
+                  code: 
+                    type: integer
+                    example: 401
+                  message:
+                    type: string
+                    example: "Invalid token"
         500:
           description: internal server error
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/error"
-                example:
-                  code: 500
-                  message: "not able to unmarshall request body"
+                properties:
+                  code: 
+                    type: integer
+                    example: 500
+                  message:
+                    type: string
+                    example: "Not able to unmarshall body"
 
   /revoke:
     post:
@@ -124,39 +161,42 @@ paths:
       summary: enable user to login and generate tokens
       security:
         - bearerAuth : []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/User"
+      parameters:
+        - in: header
+          name: Authorization
+          required: true
+          schema:
+            type: string
+            example: "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6InN1bWl0QGt1bWFyLmNvbSIsImNsYWltSUQiOiIxNDExNzcyYi1jOTU1LTQ1MzUtOTNlMi1hYmIyNGVkM2I5NjUiLCJpc3MiOiJzdW1pdCBrdW1hciIsInN1YiI6InN1bWl0QGt1bWFyLmNvbSIsImV4cCI6MTczMjY5NTcwNSwibmJmIjoxNzMyNjk0ODA1LCJpYXQiOjE3MzI2OTQ4MDUsImp0aSI6IjEifQ.Jm-_fvwk3tIWZHsm9faOzSDVlRdCOkBTsUCmpZ_HIgE"
       responses:
-        201:
-          description: user login successfully
+        204:
+          description: token revoked successfully
+        401:
+          description: token invalid or expired
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/SignResp"
-        404:
-          description: bad request
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/error"
-                example:
-                  code: 404
-                  message: "invalid password length"
+                properties:
+                  code: 
+                    type: integer
+                    example: 501
+                  message:
+                    type: string
+                    example: "Invalid access token"
         500:
           description: internal server error
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/error"
-                example:
-                  code: 500
-                  message: "not able to unmarshall request body"
+                properties:
+                  code: 
+                    type: integer
+                    example: 500
+                  message:
+                    type: string
+                    example: "Failed to revoke token"
+                
 
-  
 components:
   schemas:
     User:
@@ -182,25 +222,28 @@ components:
           example: "sumit@kumar.com"
         accessToken:
           type: string
-          example: ""
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6InN1bWl0QGt1bWFyLmNvbSIsImNsYWltSUQiOiIxNDExNzcyYi1jOTU1LTQ1MzUtOTNlMi1hYmIyNGVkM2I5NjUiLCJpc3MiOiJzdW1pdCBrdW1hciIsInN1YiI6InN1bWl0QGt1bWFyLmNvbSIsImV4cCI6MTczMjY5NTcwNSwibmJmIjoxNzMyNjk0ODA1LCJpYXQiOjE3MzI2OTQ4MDUsImp0aSI6IjEifQ.Jm-_fvwk3tIWZHsm9faOzSDVlRdCOkBTsUCmpZ_HIgE"
         refreshToken:
           type: string
-          example: ""
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6InN1bWl0QGt1bWFyLmNvbSIsImNsYWltSUQiOiJkYTBmYmUyYS03NmRkLTQwMjAtYmZjYS1jOThlYzY4NDM2YjMiLCJzdWIiOiJzdW1pdEBrdW1hci5jb20iLCJleHAiOjE3MzI3ODEyMDUsImlhdCI6MTczMjY5NDgwNX0.9es_flCknHGZsyw5NsUajYftrLtwOXT1jO_U7U7RXQQ"
 
-    error:
-      type: object
-      properties:
-        code:
-          type: integer
-        message:
-          type: string
-
-    refreshToken:
+    refreshTokenReq:
       type: object
       properties:
         refreshToken:
           type: string
-          example: ""
+          description: "refresh token"
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6InN1bWl0QGt1bWFyLmNvbSIsImNsYWltSUQiOiJkYTBmYmUyYS03NmRkLTQwMjAtYmZjYS1jOThlYzY4NDM2YjMiLCJzdWIiOiJzdW1pdEBrdW1hci5jb20iLCJleHAiOjE3MzI3ODEyMDUsImlhdCI6MTczMjY5NDgwNX0.9es_flCknHGZsyw5NsUajYftrLtwOXT1jO_U7U7RXQQ"
+
+    refreshTokenResp:
+      type: object
+      properties:
+        accessToken:
+          type: string
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6InN1bWl0QGt1bWFyLmNvbSIsImNsYWltSUQiOiIxNDExNzcyYi1jOTU1LTQ1MzUtOTNlMi1hYmIyNGVkM2I5NjUiLCJpc3MiOiJzdW1pdCBrdW1hciIsInN1YiI6InN1bWl0QGt1bWFyLmNvbSIsImV4cCI6MTczMjY5NTcwNSwibmJmIjoxNzMyNjk0ODA1LCJpYXQiOjE3MzI2OTQ4MDUsImp0aSI6IjEifQ.Jm-_fvwk3tIWZHsm9faOzSDVlRdCOkBTsUCmpZ_HIgE"
+        refreshToken:
+          type: string
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6InN1bWl0QGt1bWFyLmNvbSIsImNsYWltSUQiOiJkYTBmYmUyYS03NmRkLTQwMjAtYmZjYS1jOThlYzY4NDM2YjMiLCJzdWIiOiJzdW1pdEBrdW1hci5jb20iLCJleHAiOjE3MzI3ODEyMDUsImlhdCI6MTczMjY5NDgwNX0.9es_flCknHGZsyw5NsUajYftrLtwOXT1jO_U7U7RXQQ"
 
     healthResp:
       type: object
