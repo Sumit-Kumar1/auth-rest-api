@@ -1,6 +1,7 @@
 package server
 
 import (
+	"auth-rest-api/internal/models"
 	"context"
 	"log/slog"
 	"os"
@@ -14,6 +15,10 @@ type Database struct {
 
 func newDB(logger *slog.Logger) (*Database, error) {
 	addr := os.Getenv("DB_ADDRESS")
+	if addr == "" {
+		addr = "localhost:6379"
+	}
+
 	psswd := os.Getenv("DB_PASSWORD")
 	name := getEnvAsInt("DB_NAME", 0)
 
@@ -22,6 +27,10 @@ func newDB(logger *slog.Logger) (*Database, error) {
 		Password: psswd,
 		DB:       name,
 	})
+
+	if rClient == nil {
+		return nil, models.ErrDBNotConnected
+	}
 
 	rcmd := rClient.Ping(context.Background())
 	if err := rcmd.Err(); err != nil {
