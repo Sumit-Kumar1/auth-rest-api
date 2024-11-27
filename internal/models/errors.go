@@ -13,7 +13,7 @@ const (
 
 var (
 	ErrDBNotConnected    = constError("database not connected")
-	ErrPermissionDenied  = constError("permission denied")
+	ErrTokenRevoked      = constError("token is revoked")
 	ErrUserAlreadyExists = constError("user already exists")
 	ErrPsswdNotMatch     = constError("password does not match")
 )
