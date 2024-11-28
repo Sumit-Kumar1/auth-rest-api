@@ -21,5 +21,9 @@
 go.work
 go.work.sum
 
-# env file
-.env
+main
+
+# additional toolchain and IDE specifics
+.idea
+.vscode
+.air.toml
