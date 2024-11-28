@@ -8,16 +8,23 @@ RUN go mod download
 
 COPY . .
 
-RUN go build -o main ./cmd/main.go
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o main cmd/main.go
 
-RUN ls -la /app
+FROM alpine:3.19
 
-FROM alpine:3.28
+RUN adduser -D appuser
 
-RUN apk add --no-cache bash
+WORKDIR /app
 
-COPY --from=builder /app/main .
+COPY .env .
+
+COPY --from=builder /app/main /app/main
+
+RUN chown appuser:appuser /app/main && \
+    chmod +x /app/main
+
+USER appuser
 
 EXPOSE 9001
 
-CMD ["bash"]
+CMD ["./main"]

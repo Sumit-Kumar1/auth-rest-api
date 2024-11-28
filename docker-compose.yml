@@ -1,29 +1,30 @@
 services:
   app:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    build: .
     ports:
       - "9001:9001"
     environment:
-      - APP_NAME='auth-rest-api'
-      - APP_PORT='9001'
-      - LOG_LEVEL="DEBUG"
-      - ENV="development"
-      - READ_TIMEOUT=5
-      - WRITE_TIMEOUT=5
-      - IDLE_TIMEOUOT=10
-      - DB_ADDRESS="localhost:6379"
-      - DB_PASSWORD=""
-      - DB_NAME="0"
-      - ACCESS_SECRET='33cea8f88c5c8ad73b1700af7d72891fe3097297e59fb6cbe5fd8b545a8316d0'
-      - REFRESH_SECRET='3f1d8c2f6da4d18a37de66e1076bd6a9b865d5824aa34d1d1522c04ce6f9e507'
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
     depends_on:
       - redis
-    
+    networks:
+      - app-network
+
   redis:
-    image: redis:latest
+    image: redis:7-alpine
     ports:
       - "6379:6379"
+    networks:
+      - app-network
+    volumes:
+      - redis-data:/data
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  redis-data:
 
       
