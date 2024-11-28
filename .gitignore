@@ -21,10 +21,6 @@
 go.work
 go.work.sum
 
-# env file
-.env
-
-
 # additional toolchain and IDE specifics
 .idea
 .vscode
