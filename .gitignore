@@ -21,6 +21,8 @@
 go.work
 go.work.sum
 
+main
+
 # additional toolchain and IDE specifics
 .idea
 .vscode
