@@ -34,11 +34,11 @@ func (s *Service) SignUp(ctx context.Context, user *models.UserReq) error {
 
 	if user == nil {
 		logger.LogAttrs(ctx, slog.LevelError, "empty user struct provided")
-		return errors.New("empty user strut")
+		return models.ErrBadRequest(models.ErrInvalid("user input"))
 	}
 
 	if err := user.Validate(); err != nil {
-		return err
+		return models.ErrBadRequest(err)
 	}
 
 	exUser, err := s.Store.GetUserByEmail(ctx, user.Email)
@@ -72,11 +72,11 @@ func (s *Service) SignIn(ctx context.Context, user *models.UserReq) (access, ref
 
 	if user == nil {
 		logger.LogAttrs(ctx, slog.LevelError, "empty user struct provided")
-		return "", "", models.ErrInvalid("user")
+		return "", "", models.ErrBadRequest(models.ErrInvalid("user"))
 	}
 
 	if valErr := user.Validate(); valErr != nil {
-		return "", "", valErr
+		return "", "", models.ErrBadRequest(valErr)
 	}
 
 	exUser, err := s.Store.GetUserByEmail(ctx, user.Email)
