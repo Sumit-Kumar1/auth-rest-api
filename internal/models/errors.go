@@ -49,6 +49,10 @@ func ErrNotFound(entity string) error {
 	return NewConstError(fmt.Sprintf(notFoundFormat, entity))
 }
 
+func ErrBadRequest(err error) error {
+	return NewConstError(err.Error())
+}
+
 func ErrInvalid(entity string) error {
 	return NewConstError(fmt.Sprintf(invalidFormat, entity))
 }

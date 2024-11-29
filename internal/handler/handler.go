@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -51,6 +52,11 @@ func (h *Handler) SignUp(w http.ResponseWriter, r *http.Request) {
 			logger.LogAttrs(ctx, slog.LevelError, err.Error())
 			return
 
+		case errors.Is(err, models.ErrBadRequest(err)):
+			respondWithError(w, http.StatusBadRequest, err.Error())
+			logger.LogAttrs(ctx, slog.LevelError, err.Error())
+			return
+
 		default:
 			respondWithError(w, http.StatusInternalServerError, fmt.Sprintf("failed to sign up - %s", err.Error()))
 			logger.LogAttrs(ctx, slog.LevelError, err.Error())
@@ -63,6 +69,8 @@ func (h *Handler) SignUp(w http.ResponseWriter, r *http.Request) {
 	if _, err := w.Write([]byte("User created successfully")); err != nil {
 		logger.LogAttrs(ctx, slog.LevelError, "failed to write response", slog.String("error", err.Error()))
 	}
+
+	logger.LogAttrs(ctx, slog.LevelInfo, "user signed up successfully", slog.String("email", u.Email))
 }
 
 // SignIn lets you authenticate user with user details and JWT token
@@ -85,11 +93,23 @@ func (h *Handler) SignIn(w http.ResponseWriter, r *http.Request) {
 
 	token, refToken, err := h.Service.SignIn(ctx, &u)
 	if err != nil {
-		respondWithError(w, http.StatusUnauthorized, fmt.Sprintf("failed to signin - %s", err.Error()))
-		return
-	}
+		switch {
+		case errors.Is(err, models.ErrNotFound("user")):
+			respondWithError(w, http.StatusNotFound, err.Error())
+			logger.LogAttrs(ctx, slog.LevelError, "user not found", slog.String("email", u.Email))
+			return
 
-	logger.LogAttrs(ctx, slog.LevelInfo, "user signed in", slog.String("email", u.Email))
+		case errors.Is(err, models.ErrBadRequest(err)):
+			respondWithError(w, http.StatusBadRequest, err.Error())
+			logger.LogAttrs(ctx, slog.LevelError, err.Error())
+			return
+
+		default:
+			respondWithError(w, http.StatusInternalServerError, fmt.Sprintf("failed to sign up - %s", err.Error()))
+			logger.LogAttrs(ctx, slog.LevelError, err.Error())
+			return
+		}
+	}
 
 	resp := models.UserResp{Email: u.Email, AccessToken: token, RefreshToken: refToken}
 
@@ -99,6 +119,8 @@ func (h *Handler) SignIn(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(resp); err != nil {
 		http.Error(w, "Failed to write response", http.StatusInternalServerError)
 	}
+
+	logger.LogAttrs(ctx, slog.LevelInfo, "user signed in", slog.String("email", u.Email))
 }
 
 func (h *Handler) RefreshToken(w http.ResponseWriter, r *http.Request) {
@@ -127,6 +149,7 @@ func (h *Handler) RefreshToken(w http.ResponseWriter, r *http.Request) {
 	newAccessToken, newRefreshToken, err := h.Service.RefreshToken(ctx, token, t.Token)
 	if err != nil {
 		respondWithError(w, http.StatusUnauthorized, fmt.Sprintf("failed to refresh token - %s", err.Error()))
+		logger.LogAttrs(ctx, slog.LevelError, err.Error())
 		return
 	}
 
