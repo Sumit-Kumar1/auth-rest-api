@@ -1,18 +1,24 @@
 package server
 
 import (
-	"auth-rest-api/internal/models"
 	"context"
 	"log/slog"
 	"os"
 
+	"auth-rest-api/internal/models"
+
 	"github.com/redis/go-redis/v9"
 )
 
+// Database represents the database connection and operations.
+// It wraps the Redis client and provides methods for data persistence.
 type Database struct {
 	Client *redis.Client
 }
 
+// newDB creates a new Database instance with a Redis client.
+// It initializes the connection using environment variables or defaults.
+// Returns an error if the connection cannot be established.
 func newDB(logger *slog.Logger) (*Database, error) {
 	addr := os.Getenv("DB_ADDRESS")
 	if addr == "" {

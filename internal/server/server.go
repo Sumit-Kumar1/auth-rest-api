@@ -12,16 +12,23 @@ import (
 	"github.com/joho/godotenv"
 )
 
+// Configs holds the server configuration settings.
+// It contains basic server identification and environment information.
 type Configs struct {
 	Name string `json:"name"`
 	Env  string `json:"env"`
 }
 
+// Health represents the server's health check response.
+// It contains the status of the database and overall server health.
 type Health struct {
 	DBStatus string `json:"dbStatus"`
 	Status   string `json:"status"`
 }
 
+// Server represents the main HTTP server instance.
+// It contains all the necessary components for running the server including
+// database connection, logger, health checks, and HTTP server configuration.
 type Server struct {
 	DB          *Database
 	Logger      *slog.Logger
@@ -32,8 +39,13 @@ type Server struct {
 	*Configs
 }
 
+// Opts is a function type that modifies a Server instance.
+// It's used for configuring the server with various options.
 type Opts func(s *Server)
 
+// NewServer creates a new Server instance with the provided options.
+// It initializes all necessary components and applies the configuration options.
+// Returns an error if initialization fails.
 func NewServer(opts ...Opts) (*Server, error) {
 	s := defaultServer()
 
@@ -53,6 +65,8 @@ func NewServer(opts ...Opts) (*Server, error) {
 	return s, nil
 }
 
+// WithTimeouts creates an Opts function that sets the server timeouts.
+// It configures read, write, and idle timeouts for the HTTP server.
 func WithTimeouts(read, write, idle int) Opts {
 	return func(s *Server) {
 		s.ReadTimeout = time.Duration(read) * time.Second
@@ -61,24 +75,33 @@ func WithTimeouts(read, write, idle int) Opts {
 	}
 }
 
+// WithPort creates an Opts function that sets the server port.
+// It configures the address the server will listen on.
 func WithPort(port string) Opts {
 	return func(s *Server) {
 		s.Addr = ":" + port
 	}
 }
 
+// WithAppName creates an Opts function that sets the application name.
+// It configures the server's name in the Configs.
 func WithAppName(name string) Opts {
 	return func(s *Server) {
 		s.Name = name
 	}
 }
 
+// WithEnv creates an Opts function that sets the environment.
+// It configures the server's environment in the Configs.
 func WithEnv(env string) Opts {
 	return func(s *Server) {
 		s.Env = env
 	}
 }
 
+// ServerFromEnvs creates a new Server instance using environment variables.
+// It loads configuration from environment variables and creates a server with those settings.
+// Returns an error if environment variables are invalid or server creation fails.
 func ServerFromEnvs() (*Server, error) {
 	if err := godotenv.Load(".env"); err != nil {
 		log.Print("error while loading env file")
@@ -130,6 +153,7 @@ func loadEnvVars() []Opts {
 	idleTimeout := getEnvAsInt("IDLE_TIMEOUT", 30)   // Default to 30 second
 
 	opts = append(opts, WithTimeouts(readTimeout, writeTimeout, idleTimeout))
+
 	return opts
 }
 

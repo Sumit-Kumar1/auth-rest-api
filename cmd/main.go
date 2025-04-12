@@ -14,6 +14,9 @@ import (
 	"auth-rest-api/internal/store"
 )
 
+// main is the entry point of the application.
+// It initializes the server, sets up HTTP handlers, and starts the server.
+// It also handles graceful shutdown when the application receives an interrupt signal.
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
@@ -33,7 +36,7 @@ func main() {
 				slog.Bool("DB Connected", true), slog.Group("timeouts (durations)", slog.Duration("read", app.ReadTimeout),
 					slog.Duration("write", app.WriteTimeout), slog.Duration("idle", app.IdleTimeout))))
 
-		app.Server.Handler = app.Mux
+		app.Handler = app.Mux
 		srvErr <- app.ListenAndServe()
 	}()
 
@@ -53,6 +56,9 @@ func main() {
 	app.Logger.LogAttrs(ctx, slog.LevelInfo, "application is shut down", slog.String("name", app.Name))
 }
 
+// newHTTPHandler sets up the HTTP handlers for the application.
+// It initializes the store, service, and handler layers, and registers the routes.
+// The function configures the server's HTTP router with all necessary endpoints.
 func newHTTPHandler(app *server.Server) {
 	st := store.New(app.DB.Client)
 	svc := service.New(st)
@@ -82,6 +88,7 @@ func newHTTPHandler(app *server.Server) {
 
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write(data)
+
 			return
 		}
 

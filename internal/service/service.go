@@ -11,20 +11,26 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+// Storer defines the interface for data storage operations.
+// It provides methods for user and token management.
 type Storer interface {
-	// User
+	// User operations
 	CreateUser(ctx context.Context, u *models.UserData) error
 	GetUserByEmail(ctx context.Context, email string) (*models.UserData, error)
-	// Token
+	// Token operations
 	IsTokenRevoked(ctx context.Context, tokenID string) (bool, error)
 	CreateToken(ctx context.Context, email string, td *models.TokenData) error
 	DeleteToken(ctx context.Context, tokenID ...string) error
 }
 
+// Service represents the core business logic layer.
+// It handles user authentication and token management operations.
 type Service struct {
 	Store Storer
 }
 
+// New creates a new instance of the Service with the provided storage implementation.
+// It initializes the service with the required dependencies.
 func New(s Storer) *Service {
 	return &Service{Store: s}
 }
@@ -144,6 +150,7 @@ func (s *Service) RefreshToken(ctx context.Context, accessToken, refreshToken st
 	return td.AccessToken, td.RefreshToken, nil
 }
 
+// RevokeToken revokes the provided token, deletes stored token too
 func (s *Service) RevokeToken(ctx context.Context, token string) error {
 	logger := ctx.Value(server.Logger).(*slog.Logger)
 

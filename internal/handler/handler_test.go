@@ -1,8 +1,6 @@
 package handler
 
 import (
-	"auth-rest-api/internal/models"
-	"auth-rest-api/internal/server"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -12,8 +10,11 @@ import (
 	"os"
 	"testing"
 
-	"github.com/golang/mock/gomock"
+	"auth-rest-api/internal/models"
+	"auth-rest-api/internal/server"
+
 	"github.com/stretchr/testify/assert"
+	"go.uber.org/mock/gomock"
 )
 
 func TestHandler_SignUp(t *testing.T) {
@@ -72,6 +73,7 @@ func TestHandler_SignUp(t *testing.T) {
 	for i, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tt.mockCall()
+
 			w := httptest.NewRecorder()
 			r := httptest.NewRequestWithContext(ctx, "POST", "/sign-up", bytes.NewBuffer(tt.requestBody))
 

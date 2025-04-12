@@ -12,13 +12,18 @@ import (
 	"github.com/google/uuid"
 )
 
+// Claims represents the custom claims for JWT tokens.
+// It extends the standard JWT claims with email and claim ID fields.
 type Claims struct {
 	Email    string `json:"email"`
 	ClaimUID string `json:"claimID"`
 	jwt.RegisteredClaims
 }
 
-// GenerateToken generates a JWT token with 15 minutes of expiry
+// GenerateToken generates a new JWT token pair (access and refresh tokens).
+// It creates tokens with appropriate expiration times and unique IDs.
+// The access token expires in 15 minutes, while the refresh token lasts longer.
+// Returns the token data or an error if token generation fails.
 func GenerateToken(email string) (*models.TokenData, error) {
 	accID := uuid.NewString()
 	refID := uuid.NewString()
@@ -73,6 +78,9 @@ func GenerateToken(email string) (*models.TokenData, error) {
 	return &tkData, nil
 }
 
+// ParseToken validates and parses a JWT token.
+// It verifies the token signature and expiration time.
+// Returns the token claims or an error if the token is invalid.
 func ParseToken(tokenString, tokenType string) (*Claims, error) {
 	var (
 		token *jwt.Token
@@ -109,6 +117,9 @@ func ParseToken(tokenString, tokenType string) (*Claims, error) {
 	return nil, err
 }
 
+// getJWTSecrets retrieves the JWT signing secrets from environment variables.
+// It returns the access and refresh token secrets.
+// If environment variables are not set, it returns default values.
 func getJWTSecrets() (accessSecret, refreshSecret []byte) {
 	access := os.Getenv("ACCESS_SECRET")
 	if access == "" {

@@ -12,8 +12,12 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+const (
+	email       = "test@example.com"
+	testFailStr = "TEST[%d] Failed - %s"
+)
+
 var (
-	email = "test@example.com"
 	accID = uuid.NewString()
 	refID = uuid.NewString()
 )
@@ -37,8 +41,8 @@ func Test_getJWTSecrets(t *testing.T) {
 			t.Setenv("REFRESH_SECRET", tt.refEnv)
 
 			gotAccessSecret, gotRefreshSecret := getJWTSecrets()
-			assert.Equalf(t, tt.wantAccessSecret, gotAccessSecret, "TEST[%d] Failed - %s", i, tt.name)
-			assert.Equalf(t, tt.wantRefreshSecret, gotRefreshSecret, "TEST[%d] Failed - %s", i, tt.name)
+			assert.Equalf(t, tt.wantAccessSecret, gotAccessSecret, testFailStr, i, tt.name)
+			assert.Equalf(t, tt.wantRefreshSecret, gotRefreshSecret, testFailStr, i, tt.name)
 		})
 	}
 }
@@ -46,6 +50,7 @@ func Test_getJWTSecrets(t *testing.T) {
 func TestParseToken(t *testing.T) {
 	t.Setenv("ACCESS_SECRET", "ABCD")
 	t.Setenv("REFRESH_SECRET", "XYZ")
+
 	accessKey, refKey := getJWTSecrets()
 
 	accClaims := Claims{
@@ -104,17 +109,20 @@ func TestParseToken(t *testing.T) {
 			wantErr: errors.New("invalid token type"),
 		},
 		{
-			name:  "invalid token type",
-			token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6InN1bWl0QGt1bWFyLmNvbSIsImNsYWltSUQiOiJjNjVmMzNjYS1hNjZhLTQ1NTgtODdjNS01NTgxNGNjZWQ5ZmYiLCJzdWIiOiJzdW1pdEBrdW1hci5jb20iLCJleHAiOjE3MzI3OTg2MzEsImlhdCI6MTczMjcxMjIzMX0.leAyGmgmAqQEdkQexD8C5GzBXIZhR9HTib-tagNbbqw", tokenType: "refresh",
-			wantErr: errors.New("invalid token type"),
+			name: "invalid token type",
+			token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9." +
+				"eyJlbWFpbCI6InN1bWl0QGt1bWFyLmNvbSIsImNsYWltSUQiOiJjNjVmMzNjYS1hNjZhLTQ1NTgtODdjNS01NTgxNGNjZWQ5ZmYiLCJzdWIiOiJzdW1pdEBrdW1hci5jb20iLCJleHAiOjE3MzI3OTg2MzEsImlhdCI6MTczMjcxMjIzMX0" +
+				".leAyGmgmAqQEdkQexD8C5GzBXIZhR9HTib-tagNbbqw",
+			tokenType: "refresh",
+			wantErr:   errors.New("invalid token type"),
 		},
 	}
 	for i, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := ParseToken(tt.token, tt.tokenType)
 
-			assert.Equalf(t, tt.wantErr, err, "TEST[%d] Failed - %s", i, tt.name)
-			assert.Equalf(t, tt.want, got, "TEST[%d] Failed - %s", i, tt.name)
+			assert.Equalf(t, tt.wantErr, err, testFailStr, i, tt.name)
+			assert.Equalf(t, tt.want, got, testFailStr, i, tt.name)
 		})
 	}
 }
