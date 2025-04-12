@@ -3,12 +3,36 @@
 - This is a simple REST API using golang and redis for JWT token based authentication.
 - The API has endpoints for user registration, login, and protected routes for token refresh and revoke.
 
+## CI/CD Pipeline
+
+This project uses GitHub Actions for continuous integration and deployment:
+
+1. **Build and Test**: On every push and pull request, the pipeline:
+   - Sets up Go environment
+   - Installs dependencies
+   - Runs linters (golangci-lint)
+   - Runs tests with race detection and coverage reporting
+   - Uploads coverage to Codecov
+
+2. **Docker Build**: On pushes to the main branch, the pipeline:
+   - Builds a Docker image
+   - Pushes the image to Docker Hub
+
+To use the CI/CD pipeline:
+1. Set up the following secrets in your GitHub repository:
+   - `DOCKER_USERNAME`: Your Docker Hub username
+   - `DOCKER_PASSWORD`: Your Docker Hub password/token
+
+2. The pipeline will automatically run on:
+   - Pull requests to the main branch
+   - Pushes to the main branch
+
 ## How to use this api
 
 ### Method 1
 
 1. Clone the repository
-2. install golang preferable v1.23.3
+2. install golang preferable v1.24
 3. set envs in .env file  according to your or use existing .env
 4. run the redis-server on your local machine at `localhost:6379`
 5. run the application by command `go run cmd/main.go`
@@ -21,6 +45,33 @@
 3. make sure port `9001` and `6379` is free to run api and redis
 4. run the command `docker-compose up` and wait till it completes
 5. you can try the app at `localhost:9001` if you don't change any env
+
+## Development
+
+This project includes a Makefile for common development tasks:
+
+```bash
+# Build the application
+make build
+
+# Run tests
+make test
+
+# Run linter
+make lint
+
+# Run the application
+make run
+
+# Build Docker image
+make docker-build
+
+# Run Docker container
+make docker-run
+
+# Development with hot reload
+make dev
+```
 
 ## Exposed Endpoints
 

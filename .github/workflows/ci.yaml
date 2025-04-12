@@ -1,0 +1,69 @@
+name: CI
+
+on:
+  push:
+    branches:
+        - '*'
+  pull_request:
+    branches:
+        - main
+        - development
+
+jobs:
+  build:
+    name: Build and Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v3
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.24'
+          cache: true
+          cache-dependency-path: go.sum
+          
+      - name: Install dependencies
+        run: go mod download
+
+      - name: Run linter
+        uses: golangci/golangci-lint-action@v3
+        with:
+          version: latest
+          args: --timeout=5m
+
+      - name: Run tests
+        run: go test -v -race -coverprofile=coverage.txt -covermode=atomic ./...
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./coverage.txt
+          fail_ci_if_error: false
+
+  docker:
+    name: Build Docker Image
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          push: true
+          tags: ${{ secrets.DOCKER_USERNAME }}/auth-rest-api:latest
+          cache-from: type=registry,ref=${{ secrets.DOCKER_USERNAME }}/auth-rest-api:buildcache
+          cache-to: type=registry,ref=${{ secrets.DOCKER_USERNAME }}/auth-rest-api:buildcache,mode=max
