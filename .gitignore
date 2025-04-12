@@ -7,9 +7,11 @@
 *.dll
 *.so
 *.dylib
+main
 
 # Test binary, built with `go test -c`
 *.test
+testdata/
 
 # Output of the go coverage tool, specifically when used with LiteIDE
 *.out
@@ -21,9 +23,11 @@
 go.work
 go.work.sum
 
-main
+
 
 # additional toolchain and IDE specifics
 .idea
 .vscode
-.air.toml
+
+# air specific builds
+/tmp
