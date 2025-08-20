@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"errors"
 	"log/slog"
 
 	"auth-rest-api/internal/models"
@@ -48,7 +47,7 @@ func (s *Service) SignUp(ctx context.Context, user *models.UserReq) error {
 	}
 
 	exUser, err := s.Store.GetUserByEmail(ctx, user.Email)
-	if err != nil && !errors.Is(models.ErrNotFound("user"), err) {
+	if err != nil && !models.ErrNotFound("user").Is(err) {
 		return err
 	}
 

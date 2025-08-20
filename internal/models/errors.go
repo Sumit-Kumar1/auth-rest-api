@@ -60,8 +60,8 @@ func (err constError) Is(target error) bool {
 
 // ErrNotFound creates an error for when an entity is not found.
 // It formats the error message using the notFoundFormat constant.
-func ErrNotFound(entity string) error {
-	return fmt.Errorf(notFoundFormat, entity)
+func ErrNotFound(entity string) constError {
+	return NewConstError(fmt.Sprintf(notFoundFormat, entity))
 }
 
 // ErrBadRequest creates an error for bad request scenarios.
@@ -76,11 +76,11 @@ func ErrBadRequest(err error) error {
 // ErrInvalid creates an error for invalid entity scenarios.
 // It formats the error message using the invalidFormat constant.
 func ErrInvalid(entity string) error {
-	return fmt.Errorf(invalidFormat, entity)
+	return NewConstError(fmt.Sprintf(invalidFormat, entity))
 }
 
 // ErrRequired creates an error for required field scenarios.
 // It formats the error message using the requiredFormat constant.
 func ErrRequired(entity string) error {
-	return fmt.Errorf(requiredFormat, entity)
+	return NewConstError(fmt.Sprintf(requiredFormat, entity))
 }
