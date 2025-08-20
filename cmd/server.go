@@ -1,12 +1,10 @@
-package main
+package cmd
 
 import (
 	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
-	"os"
-	"os/signal"
 
 	"auth-rest-api/internal/handler"
 	"auth-rest-api/internal/server"
@@ -14,17 +12,13 @@ import (
 	"auth-rest-api/internal/store"
 )
 
-// main is the entry point of the application.
 // It initializes the server, sets up HTTP handlers, and starts the server.
 // It also handles graceful shutdown when the application receives an interrupt signal.
-func main() {
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
-	defer stop()
-
+func Run(ctx context.Context) error {
 	app, err := server.ServerFromEnvs()
 	if err != nil {
 		slog.LogAttrs(ctx, slog.LevelError, "failed to create server", slog.Any("error", err))
-		return
+		return err
 	}
 
 	newHTTPHandler(app)
@@ -42,18 +36,18 @@ func main() {
 
 	select {
 	case err = <-srvErr:
-		app.Logger.Error(err.Error())
-		return
+		return err
 	case <-ctx.Done():
-		stop()
 	}
 
 	err = app.Shutdown(context.Background())
 	if err != nil {
 		app.Logger.LogAttrs(ctx, slog.LevelError, "error while shutting down", slog.String("error", err.Error()))
+		return err
 	}
 
 	app.Logger.LogAttrs(ctx, slog.LevelInfo, "application is shut down", slog.String("name", app.Name))
+	return nil
 }
 
 // newHTTPHandler sets up the HTTP handlers for the application.
