@@ -104,7 +104,7 @@ func (h *Handler) SignIn(w http.ResponseWriter, r *http.Request) {
 	token, refToken, err := h.Service.SignIn(ctx, &u)
 	if err != nil {
 		switch {
-		case errors.Is(err, models.ErrNotFound("user")):
+		case errors.Is(err, models.ErrUserNotFound):
 			respondWithError(w, http.StatusNotFound, err.Error())
 			logger.LogAttrs(ctx, slog.LevelError, "user not found", slog.String("email", u.Email))
 
@@ -207,12 +207,12 @@ func (h *Handler) RevokeToken(w http.ResponseWriter, r *http.Request) {
 }
 
 func respondWithError(w http.ResponseWriter, code int, reason string) {
-	cErr := models.CustomError{Message: reason, Code: code}
+	errHTTP := models.NewHTTPError(code, reason, "")
 
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(cErr.Code)
+	w.WriteHeader(errHTTP.Code)
 
-	if err := json.NewEncoder(w).Encode(cErr); err != nil {
+	if err := json.NewEncoder(w).Encode(errHTTP); err != nil {
 		http.Error(w, "Failed to write response", http.StatusInternalServerError)
 	}
 }

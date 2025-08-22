@@ -16,6 +16,7 @@ type Storer interface {
 	// User operations
 	CreateUser(ctx context.Context, u *models.UserData) error
 	GetUserByEmail(ctx context.Context, email string) (*models.UserData, error)
+
 	// Token operations
 	IsTokenRevoked(ctx context.Context, tokenID string) (bool, error)
 	CreateToken(ctx context.Context, email string, td *models.TokenData) error
@@ -47,7 +48,7 @@ func (s *Service) SignUp(ctx context.Context, user *models.UserReq) error {
 	}
 
 	exUser, err := s.Store.GetUserByEmail(ctx, user.Email)
-	if err != nil && !models.ErrNotFound("user").Is(err) {
+	if err != nil && !models.ErrUserNotFound.Is(err) {
 		return err
 	}
 
@@ -91,7 +92,7 @@ func (s *Service) SignIn(ctx context.Context, user *models.UserReq) (access, ref
 
 	if err = bcrypt.CompareHashAndPassword(exUser.Password, []byte(user.Password)); err != nil {
 		logger.LogAttrs(ctx, slog.LevelError, "wrong password")
-		return "", "", models.ErrPsswdNotMatch
+		return "", "", models.ErrPasswordMismatch
 	}
 
 	tokenData, err := GenerateToken(user.Email)

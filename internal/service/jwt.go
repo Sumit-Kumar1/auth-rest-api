@@ -2,7 +2,6 @@ package service
 
 import (
 	"encoding/json"
-	"errors"
 	"os"
 	"time"
 
@@ -47,9 +46,7 @@ func GenerateToken(email string) (*models.TokenData, error) {
 	}
 
 	accessKey, refKey := getJWTSecrets()
-
 	accessToken := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-
 	refToken := jwt.NewWithClaims(jwt.SigningMethodHS256, Claims{
 		Email:            email,
 		ClaimUID:         refID,
@@ -99,7 +96,7 @@ func ParseToken(tokenString, tokenType string) (*Claims, error) {
 			return refSecret, nil
 		})
 	default:
-		return nil, errors.New("invalid token type")
+		return nil, models.ErrInvalid("token type")
 	}
 
 	if err != nil {

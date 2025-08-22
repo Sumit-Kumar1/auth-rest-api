@@ -54,14 +54,14 @@ func (s *Store) GetUserByEmail(ctx context.Context, email string) (*models.UserD
 	passwd, err := s.DB.HGet(ctx, userTable, email).Result()
 	if err != nil {
 		if errors.Is(err, redis.Nil) {
-			return nil, models.ErrNotFound("user")
+			return nil, models.ErrUserNotFound
 		}
 
 		return nil, err
 	}
 
 	if passwd == "" {
-		return nil, models.ErrNotFound("user")
+		return nil, models.ErrUserNotFound
 	}
 
 	return &models.UserData{Email: email, Password: []byte(passwd)}, nil

@@ -1,7 +1,6 @@
 package service
 
 import (
-	"errors"
 	"testing"
 	"time"
 
@@ -17,11 +16,6 @@ const (
 	testFailStr = "TEST[%d] Failed - %s"
 )
 
-var (
-	accID = uuid.NewString()
-	refID = uuid.NewString()
-)
-
 func Test_getJWTSecrets(t *testing.T) {
 	tests := []struct {
 		name              string
@@ -30,9 +24,12 @@ func Test_getJWTSecrets(t *testing.T) {
 		wantAccessSecret  []byte
 		wantRefreshSecret []byte
 	}{
-		{name: "missing access secret", accEnv: "", wantAccessSecret: []byte("my_secret_key"), wantRefreshSecret: []byte("my_refresh_secret_key")},
-		{name: "missing refresh secret", accEnv: "ABCD", wantAccessSecret: []byte("my_secret_key"), wantRefreshSecret: []byte("my_refresh_secret_key")},
-		{name: "valid secrets", accEnv: "ABCD", refEnv: "XYZ", wantAccessSecret: []byte("ABCD"), wantRefreshSecret: []byte("XYZ")},
+		{name: "missing access secret", accEnv: "", wantAccessSecret: []byte("my_secret_key"),
+			wantRefreshSecret: []byte("my_refresh_secret_key")},
+		{name: "missing refresh secret", accEnv: "ABCD", wantAccessSecret: []byte("my_secret_key"),
+			wantRefreshSecret: []byte("my_refresh_secret_key")},
+		{name: "valid secrets", accEnv: "ABCD", refEnv: "XYZ", wantAccessSecret: []byte("ABCD"),
+			wantRefreshSecret: []byte("XYZ")},
 	}
 
 	for i, tt := range tests {
@@ -48,6 +45,11 @@ func Test_getJWTSecrets(t *testing.T) {
 }
 
 func TestParseToken(t *testing.T) {
+	var (
+		accID = uuid.NewString()
+		refID = uuid.NewString()
+	)
+
 	t.Setenv("ACCESS_SECRET", "ABCD")
 	t.Setenv("REFRESH_SECRET", "XYZ")
 
@@ -106,15 +108,17 @@ func TestParseToken(t *testing.T) {
 		{
 			name:  "invalid token type",
 			token: valRefToken, tokenType: "ref",
-			wantErr: errors.New("invalid token type"),
+			wantErr: models.ErrInvalid("token type"),
 		},
 		{
 			name: "invalid token type",
 			token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9." +
-				"eyJlbWFpbCI6InN1bWl0QGt1bWFyLmNvbSIsImNsYWltSUQiOiJjNjVmMzNjYS1hNjZhLTQ1NTgtODdjNS01NTgxNGNjZWQ5ZmYiLCJzdWIiOiJzdW1pdEBrdW1hci5jb20iLCJleHAiOjE3MzI3OTg2MzEsImlhdCI6MTczMjcxMjIzMX0" +
+				"eyJlbWFpbCI6InN1bWl0QGt1bWFyLmNvbSIsImNsYWltSUQiOiJjNjVmMzNjYS1h" +
+				"NjZhLTQ1NTgtODdjNS01NTgxNGNjZWQ5ZmYiLCJzdWIiOiJzdW1pdEBrdW1hci5jb20" +
+				"iLCJleHAiOjE3MzI3OTg2MzEsImlhdCI6MTczMjcxMjIzMX0" +
 				".leAyGmgmAqQEdkQexD8C5GzBXIZhR9HTib-tagNbbqw",
 			tokenType: "refresh",
-			wantErr:   errors.New("invalid token type"),
+			wantErr:   models.ErrInvalid("token type"),
 		},
 	}
 	for i, tt := range tests {

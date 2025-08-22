@@ -12,6 +12,10 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+var (
+	errRedis = errors.New("redis error")
+)
+
 func TestStore_CreateUser(t *testing.T) {
 	db, mock := redismock.NewClientMock()
 	s := New(db)
@@ -85,13 +89,13 @@ func TestStore_GetUserByEmail(t *testing.T) {
 			name:     "empty password",
 			email:    email,
 			mockCall: func() { mock.ExpectHGet("users", email).SetVal("") },
-			wantErr:  models.ErrNotFound("user"),
+			wantErr:  models.ErrUserNotFound,
 		},
 		{
 			name:     "no entry for email",
 			email:    email,
 			mockCall: func() { mock.ExpectHGet("users", email).RedisNil() },
-			wantErr:  models.ErrNotFound("user"),
+			wantErr:  models.ErrUserNotFound,
 		},
 		{
 			name:     "redis error",
@@ -155,9 +159,9 @@ func TestStore_DeleteToken(t *testing.T) {
 			name:     "redis error on delete",
 			tokenIDs: []string{tk1},
 			mockCall: func() {
-				mock.ExpectDel(tk1).SetErr(errors.New("redis error"))
+				mock.ExpectDel(tk1).SetErr(errRedis)
 			},
-			wantErr: errors.New("redis error"),
+			wantErr: errRedis,
 		},
 	}
 	for i, tt := range tests {
@@ -206,10 +210,10 @@ func TestStore_IsTokenRevoked(t *testing.T) {
 			name:    "redis error on check",
 			tokenID: revokedID,
 			mockCall: func() {
-				mock.ExpectExists(revokedID).SetErr(errors.New("redis error"))
+				mock.ExpectExists(revokedID).SetErr(errRedis)
 			},
 			want:    false,
-			wantErr: errors.New("redis error"),
+			wantErr: errRedis,
 		},
 		{
 			name:    "empty token ID",
