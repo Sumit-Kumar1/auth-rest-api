@@ -2,7 +2,6 @@ package models
 
 import (
 	"fmt"
-	"strings"
 )
 
 const (
@@ -12,10 +11,11 @@ const (
 )
 
 var (
-	ErrDBNotConnected    = constError("database not connected")
-	ErrTokenRevoked      = constError("token is revoked")
-	ErrUserAlreadyExists = constError("user already exists")
-	ErrPsswdNotMatch     = constError("password does not match")
+	ErrDBNotConnected    = NewConstError("database not connected")
+	ErrTokenRevoked      = NewConstError("token is revoked")
+	ErrUserAlreadyExists = NewConstError("user already exists")
+	ErrPasswordMismatch  = NewConstError("password does not match")
+	ErrUserNotFound      = NewConstError("user does not exist")
 )
 
 // CustomError represents an error that can be sent in HTTP responses.
@@ -23,6 +23,7 @@ var (
 type CustomError struct {
 	Code    int    `json:"code"`
 	Message string `json:"message"`
+	Details string `json:"details,omitempty"`
 }
 
 // Error implements the error interface for CustomError.
@@ -31,8 +32,30 @@ func (e *CustomError) Error() string {
 	return e.Message
 }
 
+// NewHTTPError created a custom error based on code, msg and detail of error,
+// use only at handler layer
+func NewHTTPError(code int, msg, details string) *CustomError {
+	return &CustomError{
+		Code:    code,
+		Message: msg,
+		Details: details,
+	}
+}
+
+// ErrBadRequest creates an error for bad request scenarios.
+// It wraps the provided error in a CustomError with a 400 status code.
+func ErrBadRequest(err error) *CustomError {
+	return NewHTTPError(400, err.Error(), "")
+}
+
+// ErrNotFound creates an error for when an entity is not found.
+// It formats the error message using the notFoundFormat constant.
+func ErrNotFound(entity string) *CustomError {
+	return NewHTTPError(404, fmt.Sprintf(notFoundFormat, entity), "")
+}
+
 // constError is a type that implements the error interface.
-// It's used for creating constant error values.
+// It's used for creating constant error values for internal error use.
 type constError string
 
 // NewConstError creates a new constant error with the given message.
@@ -55,22 +78,7 @@ func (err constError) Is(target error) bool {
 		return false
 	}
 
-	return strings.EqualFold(string(err), string(t))
-}
-
-// ErrNotFound creates an error for when an entity is not found.
-// It formats the error message using the notFoundFormat constant.
-func ErrNotFound(entity string) constError {
-	return NewConstError(fmt.Sprintf(notFoundFormat, entity))
-}
-
-// ErrBadRequest creates an error for bad request scenarios.
-// It wraps the provided error in a CustomError with a 400 status code.
-func ErrBadRequest(err error) error {
-	return &CustomError{
-		Code:    400,
-		Message: err.Error(),
-	}
+	return err == t
 }
 
 // ErrInvalid creates an error for invalid entity scenarios.
