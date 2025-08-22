@@ -45,6 +45,10 @@ linters:
       min-occurrences: 3
     lll:
       line-length: 140
+    revive:
+      directives:
+        - exclude:
+            - package-comments
     gocritic:
       enabled-tags:
         - diagnostic
