@@ -47,6 +47,7 @@ func Run(ctx context.Context) error {
 	}
 
 	app.Logger.LogAttrs(ctx, slog.LevelInfo, "application is shut down", slog.String("name", app.Name))
+
 	return nil
 }
 
