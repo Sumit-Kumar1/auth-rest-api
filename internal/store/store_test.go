@@ -31,7 +31,7 @@ func TestStore_CreateUser(t *testing.T) {
 	}{
 		{
 			name:     "valid case",
-			user:     &models.UserData{Email: email, Password: passwd},
+			user:     &models.UserData{ID: uuid.NewString(), Email: email, Password: passwd},
 			mockCall: func() { mock.ExpectHSet("users", email, passwd).SetVal(1) },
 		},
 		{
@@ -121,6 +121,7 @@ func TestStore_GetUserByEmail(t *testing.T) {
 func TestStore_DeleteToken(t *testing.T) {
 	db, mock := redismock.NewClientMock()
 	s := New(db)
+	email := "sumit@kumar.com"
 	ctx := context.Background()
 	tk1 := uuid.NewString()
 	tk2 := uuid.NewString()
@@ -133,9 +134,9 @@ func TestStore_DeleteToken(t *testing.T) {
 	}{
 		{
 			name:     "valid case",
-			tokenIDs: []string{tk1},
+			tokenIDs: []string{tk1, ""},
 			mockCall: func() {
-				mock.ExpectDel(tk1).SetVal(1)
+				mock.ExpectDel(tk1, "").SetVal(1)
 			},
 			wantErr: nil,
 		},
@@ -149,25 +150,27 @@ func TestStore_DeleteToken(t *testing.T) {
 		},
 		{
 			name:     "delete non-existent token",
-			tokenIDs: []string{"nonexistent"},
+			tokenIDs: []string{"nonexistent", ""},
 			mockCall: func() {
-				mock.ExpectDel("nonexistent").SetVal(0)
+				mock.ExpectDel("nonexistent", "").SetVal(0)
 			},
 			wantErr: models.NewConstError("delete error"),
 		},
 		{
 			name:     "redis error on delete",
-			tokenIDs: []string{tk1},
+			tokenIDs: []string{tk1, ""},
 			mockCall: func() {
 				mock.ExpectDel(tk1).SetErr(errRedis)
 			},
 			wantErr: errRedis,
 		},
 	}
+
 	for i, tt := range tests {
 		tt.mockCall()
 
-		assert.Equal(t, tt.wantErr, s.DeleteToken(ctx, tt.tokenIDs...), "TEST[%d] Failed - %s", i, tt.name)
+		assert.Equal(t, tt.wantErr, s.DeleteToken(ctx, email, tt.tokenIDs[0], tt.tokenIDs[1]),
+			"TEST[%d] Failed - %s", i, tt.name)
 	}
 
 	assert.NoError(t, mock.ExpectationsWereMet())
