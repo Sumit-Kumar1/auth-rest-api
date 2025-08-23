@@ -98,3 +98,57 @@ NOTE: **password** should be 8 character long, **email** should be in format `us
 
 - Revoke existing token: `curl --location --request POST 'http://localhost:9001/revoke' --header 'Authorization: *****'`
   - **NOTE**: *replace `*****` with actual access token value (it is a bearer token)*
+
+
+## Low Level Details
+
+### Handling User data (Redis Data structure):
+- for each user store: `user ID, Email, Password (hashed)`
+- schema:
+   ```
+      Key : email:<email>
+      Value: <user_id>
+
+
+      Key : user:<user_id>
+      Fields:
+            - id: <user_id>
+            - email: <email>
+            - password: <password>
+   ```
+
+### Handling JWT tokens
+- for each user signin request, it create two token : `access_token, refresh_token`
+- access token key linking token ID to user email, with expiration TTL
+- refresh token key linking token ID to user email, with expiration TTL
+- Sets tracking all active token IDs per user for access and refresh tokens
+- schema:
+```
+   Key: access_token:<access_token_id> 
+   Value: <email>
+
+   Key: refresh_token:<refresh_token_id>
+   Value: <email>
+
+   Key : user_access_tokens:<email>
+   Value: SET {access_token_id1, .....}
+
+   Key: user_refresh_tokens:<email>
+   Value: SET {refresh_token_id1, .....}
+```
+#### Operational Workflow
+
+- Issuing Tokens:
+
+   - Use SET to store access_token:{tokenId} and refresh_token:{tokenId} with user email as value, applying expiration TTL based on token lifetime.
+   - Add token IDs to corresponding user Sets using SADD.
+
+- Validating Tokens:
+
+   - Lookup token using GET access_token:{tokenId} or GET refresh_token:{tokenId} to verify existence and retrieve user.
+
+- Revoking Tokens:
+
+   - Delete token keys using DEL.
+   - Remove token IDs from user Sets using SREM.
+   - To revoke all tokens of a user, iterate their Sets and delete each token key, then clear the Set.
