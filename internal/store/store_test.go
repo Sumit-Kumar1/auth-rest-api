@@ -136,7 +136,8 @@ func TestStore_DeleteToken(t *testing.T) {
 			name:     "valid case",
 			tokenIDs: []string{tk1, ""},
 			mockCall: func() {
-				mock.ExpectDel(tk1, "").SetVal(1)
+				mock.ExpectDel(accTokend + tk1).SetVal(1)
+				mock.ExpectSRem(userAccTokend+email, tk1).SetVal(1)
 			},
 			wantErr: nil,
 		},
@@ -144,30 +145,32 @@ func TestStore_DeleteToken(t *testing.T) {
 			name:     "valid case - 2",
 			tokenIDs: []string{tk1, tk2},
 			mockCall: func() {
-				mock.ExpectDel(tk1, tk2).SetVal(2)
+				mock.ExpectDel(accTokend + tk1).SetVal(1)
+				mock.ExpectSRem(userAccTokend+email, tk1).SetVal(1)
+
+				mock.ExpectDel(refTokend + tk2).SetVal(1)
+				mock.ExpectSRem(userRefTokend+email, tk2).SetVal(1)
 			},
 			wantErr: nil,
-		},
-		{
-			name:     "delete non-existent token",
-			tokenIDs: []string{"nonexistent", ""},
-			mockCall: func() {
-				mock.ExpectDel("nonexistent", "").SetVal(0)
-			},
-			wantErr: models.NewConstError("delete error"),
 		},
 		{
 			name:     "redis error on delete",
 			tokenIDs: []string{tk1, ""},
 			mockCall: func() {
-				mock.ExpectDel(tk1).SetErr(errRedis)
+				mock.ExpectDel(accTokend + tk1).SetVal(1)
+				mock.ExpectSRem(userAccTokend+email, tk1).SetErr(errRedis)
 			},
 			wantErr: errRedis,
 		},
 	}
 
 	for i, tt := range tests {
+		mock.ExpectTxPipeline()
 		tt.mockCall()
+
+		if tt.wantErr == nil {
+			mock.ExpectTxPipelineExec()
+		}
 
 		assert.Equal(t, tt.wantErr, s.DeleteToken(ctx, email, tt.tokenIDs[0], tt.tokenIDs[1]),
 			"TEST[%d] Failed - %s", i, tt.name)
@@ -195,7 +198,7 @@ func TestStore_IsTokenRevoked(t *testing.T) {
 			name:    "token revoked",
 			tokenID: revokedID,
 			mockCall: func() {
-				mock.ExpectExists(revokedID).SetVal(0)
+				mock.ExpectExists(accTokend + revokedID).SetVal(0)
 			},
 			want:    true,
 			wantErr: nil,
@@ -204,7 +207,7 @@ func TestStore_IsTokenRevoked(t *testing.T) {
 			name:    "token not revoked",
 			tokenID: tokenID,
 			mockCall: func() {
-				mock.ExpectExists(tokenID).SetVal(1)
+				mock.ExpectExists(accTokend + tokenID).SetVal(1)
 			},
 			want:    false,
 			wantErr: nil,
@@ -213,7 +216,7 @@ func TestStore_IsTokenRevoked(t *testing.T) {
 			name:    "redis error on check",
 			tokenID: revokedID,
 			mockCall: func() {
-				mock.ExpectExists(revokedID).SetErr(errRedis)
+				mock.ExpectExists(accTokend + revokedID).SetErr(errRedis)
 			},
 			want:    false,
 			wantErr: errRedis,
@@ -222,19 +225,17 @@ func TestStore_IsTokenRevoked(t *testing.T) {
 			name:    "empty token ID",
 			tokenID: "",
 			mockCall: func() {
-				mock.ExpectExists("").SetVal(0)
+				mock.ExpectExists(accTokend).SetVal(0)
 			},
-			want:    true,
-			wantErr: nil,
+			want: true,
 		},
 		{
 			name:    "redis Nil",
 			tokenID: revokedID,
 			mockCall: func() {
-				mock.ExpectExists(revokedID).RedisNil()
+				mock.ExpectExists(accTokend + revokedID).RedisNil()
 			},
-			want:    true,
-			wantErr: nil,
+			want: true,
 		},
 	}
 
