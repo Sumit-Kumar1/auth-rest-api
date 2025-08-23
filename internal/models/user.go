@@ -23,6 +23,7 @@ type UserResp struct {
 // UserData represents the internal user data structure.
 // It contains the user's email and hashed password.
 type UserData struct {
+	ID       string `json:"-"`
 	Email    string `json:"email"`
 	Password []byte `json:"-"`
 }

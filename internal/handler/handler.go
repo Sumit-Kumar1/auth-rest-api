@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -42,7 +43,7 @@ func (h *Handler) SignUp(w http.ResponseWriter, r *http.Request) {
 	var u models.UserReq
 
 	if r.Body == nil {
-		respondWithError(w, http.StatusBadRequest, "Request body missing")
+		respondWithError(w, http.StatusBadRequest, "missing request body")
 		return
 	}
 
@@ -50,6 +51,8 @@ func (h *Handler) SignUp(w http.ResponseWriter, r *http.Request) {
 		respondWithError(w, http.StatusBadRequest, fmt.Sprintf("failed to bind body - %s", err.Error()))
 		return
 	}
+
+	defer func(body io.ReadCloser) { _ = body.Close() }(r.Body)
 
 	if err := h.Service.SignUp(ctx, &u); err != nil {
 		switch {
@@ -100,6 +103,8 @@ func (h *Handler) SignIn(w http.ResponseWriter, r *http.Request) {
 
 		return
 	}
+
+	defer func(body io.ReadCloser) { _ = body.Close() }(r.Body)
 
 	token, refToken, err := h.Service.SignIn(ctx, &u)
 	if err != nil {
@@ -161,6 +166,8 @@ func (h *Handler) RefreshToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	defer func(body io.ReadCloser) { _ = body.Close() }(r.Body)
+
 	newAccessToken, newRefreshToken, err := h.Service.RefreshToken(ctx, token, t.Token)
 	if err != nil {
 		respondWithError(w, http.StatusUnauthorized, fmt.Sprintf("failed to refresh token - %s", err.Error()))
@@ -213,6 +220,6 @@ func respondWithError(w http.ResponseWriter, code int, reason string) {
 	w.WriteHeader(errHTTP.Code)
 
 	if err := json.NewEncoder(w).Encode(errHTTP); err != nil {
-		http.Error(w, "Failed to write response", http.StatusInternalServerError)
+		http.Error(w, "failed to write response", http.StatusInternalServerError)
 	}
 }
