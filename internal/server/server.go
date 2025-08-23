@@ -51,7 +51,7 @@ func NewServer(opts ...Opts) (*Server, error) {
 
 	s.Logger = newLogger()
 
-	db, err := newDB(s.Logger)
+	db, err := getDatabase(s.Logger)
 	if err != nil {
 		return nil, err
 	}

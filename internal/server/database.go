@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"os"
+	"sync"
 
 	"auth-rest-api/internal/models"
 
@@ -15,6 +16,12 @@ import (
 type Database struct {
 	Client *redis.Client
 }
+
+//nolint:gochecknoglobals // had to define global for singleton pattern
+var (
+	dbInstance *Database
+	dbOnce     sync.Once
+)
 
 // newDB creates a new Database instance with a Redis client.
 // It initializes the connection using environment variables or defaults.
@@ -46,4 +53,15 @@ func newDB(logger *slog.Logger) (*Database, error) {
 	logger.LogAttrs(context.Background(), slog.LevelInfo, "Connected to Redis success!")
 
 	return &Database{Client: rClient}, nil
+}
+
+// getDatabase returns a singleton instance of Database.
+func getDatabase(logger *slog.Logger) (*Database, error) {
+	var err error
+
+	dbOnce.Do(func() {
+		dbInstance, err = newDB(logger)
+	})
+
+	return dbInstance, err
 }
