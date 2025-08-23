@@ -7,6 +7,7 @@ import (
 	"auth-rest-api/internal/models"
 	"auth-rest-api/internal/server"
 
+	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -20,7 +21,7 @@ type Storer interface {
 	// Token operations
 	IsTokenRevoked(ctx context.Context, tokenID string) (bool, error)
 	CreateToken(ctx context.Context, email string, td *models.TokenData) error
-	DeleteToken(ctx context.Context, tokenID ...string) error
+	DeleteToken(ctx context.Context, email, accTokenID, refTokenID string) error
 }
 
 // Service represents the core business logic layer.
@@ -39,7 +40,7 @@ func (s *Service) SignUp(ctx context.Context, user *models.UserReq) error {
 	logger := ctx.Value(server.Logger).(*slog.Logger)
 
 	if user == nil {
-		logger.LogAttrs(ctx, slog.LevelError, "empty user struct provided")
+		logger.LogAttrs(ctx, slog.LevelError, "signup-service: empty user struct provided")
 		return models.ErrBadRequest(models.ErrInvalid("user input"))
 	}
 
@@ -62,6 +63,7 @@ func (s *Service) SignUp(ctx context.Context, user *models.UserReq) error {
 	}
 
 	ud := models.UserData{
+		ID:       uuid.NewString(),
 		Email:    user.Email,
 		Password: hash,
 	}
@@ -95,12 +97,12 @@ func (s *Service) SignIn(ctx context.Context, user *models.UserReq) (access, ref
 		return "", "", models.ErrPasswordMismatch
 	}
 
-	tokenData, err := GenerateToken(user.Email)
+	tokenData, err := GenerateToken(exUser.ID, exUser.Email)
 	if err != nil {
 		return "", "", err
 	}
 
-	if err := s.Store.CreateToken(ctx, user.Email, tokenData); err != nil {
+	if err := s.Store.CreateToken(ctx, exUser.Email, tokenData); err != nil {
 		return "", "", err
 	}
 
@@ -108,22 +110,13 @@ func (s *Service) SignIn(ctx context.Context, user *models.UserReq) (access, ref
 }
 
 func (s *Service) RefreshToken(ctx context.Context, accessToken, refreshToken string) (access, refresh string, err error) {
-	logger := ctx.Value(server.Logger).(*slog.Logger)
-
-	accClaims, err := ParseToken(accessToken, "access")
+	accessClaim, refreshClaim, err := s.tokenParsing(accessToken, refresh)
 	if err != nil {
-		logger.LogAttrs(ctx, slog.LevelError, "invalid access token", slog.String("token", accessToken), slog.String("error", err.Error()))
 		return "", "", err
 	}
 
-	refClaims, err := ParseToken(refreshToken, "refresh")
-	if err != nil {
-		logger.LogAttrs(ctx, slog.LevelError, "invalid refresh token", slog.String("token", refreshToken), slog.String("error", err.Error()))
-		return "", "", err
-	}
-
-	// check if token is revoked
-	isRevoked, err := s.Store.IsTokenRevoked(ctx, accClaims.ClaimUID)
+	// check if access token is revoked
+	isRevoked, err := s.Store.IsTokenRevoked(ctx, accessClaim.ClaimUID)
 	if err != nil {
 		return "", "", err
 	}
@@ -133,17 +126,17 @@ func (s *Service) RefreshToken(ctx context.Context, accessToken, refreshToken st
 	}
 
 	// Deleting old active tokens
-	if delErr := s.Store.DeleteToken(ctx, accClaims.ClaimUID, refClaims.ClaimUID); delErr != nil {
+	if delErr := s.Store.DeleteToken(ctx, accessClaim.Email, accessClaim.ClaimUID, refreshClaim.ClaimUID); delErr != nil {
 		return "", "", delErr
 	}
 
-	td, err := GenerateToken(accClaims.Email)
+	td, err := GenerateToken(accessClaim.Subject, accessClaim.Email)
 	if err != nil {
 		return "", "", err
 	}
 
 	// store the newly generated tokens UIDs
-	if err := s.Store.CreateToken(ctx, accClaims.Email, td); err != nil {
+	if err := s.Store.CreateToken(ctx, accessClaim.Email, td); err != nil {
 		return "", "", err
 	}
 
@@ -160,9 +153,23 @@ func (s *Service) RevokeToken(ctx context.Context, token string) error {
 		return err
 	}
 
-	if delErr := s.Store.DeleteToken(ctx, accClaims.ClaimUID); delErr != nil {
+	if delErr := s.Store.DeleteToken(ctx, accClaims.Email, accClaims.ClaimUID, ""); delErr != nil {
 		return delErr
 	}
 
 	return nil
+}
+
+func (s *Service) tokenParsing(accToken, refToken string) (access, refresh *Claims, err error) {
+	access, err = ParseToken(accToken, "access")
+	if err != nil {
+		return nil, nil, err
+	}
+
+	refresh, err = ParseToken(refToken, "refresh")
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return
 }

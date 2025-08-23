@@ -155,7 +155,7 @@ func TestGenerateToken(t *testing.T) {
 
 	for i, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := GenerateToken(tt.email)
+			_, err := GenerateToken(uuid.NewString(), tt.email)
 
 			assert.Equalf(t, tt.wantErr, err, "TEST[%d] Failed - %s", i, tt.name)
 		})

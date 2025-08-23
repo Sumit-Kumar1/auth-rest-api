@@ -16,6 +16,7 @@ import (
 type Claims struct {
 	Email    string `json:"email"`
 	ClaimUID string `json:"claimID"`
+	// regsiteredClaim's subject is userID from db
 	jwt.RegisteredClaims
 }
 
@@ -23,9 +24,11 @@ type Claims struct {
 // It creates tokens with appropriate expiration times and unique IDs.
 // The access token expires in 15 minutes, while the refresh token lasts longer.
 // Returns the token data or an error if token generation fails.
-func GenerateToken(email string) (*models.TokenData, error) {
+func GenerateToken(idSub, email string) (*models.TokenData, error) {
 	accID := uuid.NewString()
 	refID := uuid.NewString()
+	jti := uuid.NewString()
+
 	claims := Claims{
 		Email:    email,
 		ClaimUID: accID,
@@ -33,16 +36,16 @@ func GenerateToken(email string) (*models.TokenData, error) {
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Minute * 15)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 			NotBefore: jwt.NewNumericDate(time.Now()),
-			Issuer:    "sumit kumar",
-			Subject:   email,
-			ID:        "1",
+			Issuer:    "auth-rest-api",
+			Subject:   idSub,
+			ID:        jti,
 		},
 	}
 
 	refClaims := jwt.RegisteredClaims{
 		ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour * 24)),
 		IssuedAt:  jwt.NewNumericDate(time.Now()),
-		Subject:   email,
+		Subject:   idSub,
 	}
 
 	accessKey, refKey := getJWTSecrets()
