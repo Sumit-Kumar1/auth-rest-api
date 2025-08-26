@@ -16,10 +16,12 @@ import (
 
 // Servicer defines the interface for service layer operations.
 // It provides methods for user authentication and token management.
+//
+//go:generate mockgen -source=handler.go -destination=mock_interface.go -package=handler
 type Servicer interface {
 	SignUp(ctx context.Context, user *models.UserReq) error
-	SignIn(ctx context.Context, user *models.UserReq) (string, string, error)
-	RefreshToken(ctx context.Context, accToken, refToken string) (string, string, error)
+	SignIn(ctx context.Context, user *models.UserReq) (*models.TokenResponse, error)
+	RefreshToken(ctx context.Context, accToken, refToken string) (*models.TokenResponse, error)
 	RevokeToken(ctx context.Context, accToken string) error
 }
 
@@ -106,7 +108,7 @@ func (h *Handler) SignIn(w http.ResponseWriter, r *http.Request) {
 
 	defer func(body io.ReadCloser) { _ = body.Close() }(r.Body)
 
-	token, refToken, err := h.Service.SignIn(ctx, &u)
+	tokenResp, err := h.Service.SignIn(ctx, &u)
 	if err != nil {
 		switch {
 		case errors.Is(err, models.ErrUserNotFound):
@@ -129,7 +131,11 @@ func (h *Handler) SignIn(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	resp := models.UserResp{Email: u.Email, AccessToken: token, RefreshToken: refToken}
+	resp := models.UserResp{
+		Email:        u.Email,
+		AccessToken:  tokenResp.AccessToken,
+		RefreshToken: tokenResp.RefreshToken,
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
@@ -168,7 +174,7 @@ func (h *Handler) RefreshToken(w http.ResponseWriter, r *http.Request) {
 
 	defer func(body io.ReadCloser) { _ = body.Close() }(r.Body)
 
-	newAccessToken, newRefreshToken, err := h.Service.RefreshToken(ctx, token, t.Token)
+	tokenResp, err := h.Service.RefreshToken(ctx, token, t.Token)
 	if err != nil {
 		respondWithError(w, http.StatusUnauthorized, fmt.Sprintf("failed to refresh token - %s", err.Error()))
 		logger.LogAttrs(ctx, slog.LevelError, err.Error())
@@ -176,15 +182,18 @@ func (h *Handler) RefreshToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	userResp := models.UserResp{AccessToken: tokenResp.AccessToken,
+		RefreshToken: tokenResp.RefreshToken}
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 
-	if err := json.NewEncoder(w).Encode(models.UserResp{AccessToken: newAccessToken, RefreshToken: newRefreshToken}); err != nil {
+	if err := json.NewEncoder(w).Encode(userResp); err != nil {
 		logger.LogAttrs(ctx, slog.LevelError, "failed to write response", slog.String("error", err.Error()))
 		return
 	}
 
-	logger.LogAttrs(ctx, slog.LevelInfo, "user refreshed token", slog.String("token", newRefreshToken))
+	logger.LogAttrs(ctx, slog.LevelInfo, "user refreshed token")
 }
 
 func (h *Handler) RevokeToken(w http.ResponseWriter, r *http.Request) {
@@ -210,7 +219,7 @@ func (h *Handler) RevokeToken(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusNoContent)
 
-	logger.LogAttrs(ctx, slog.LevelInfo, "revoked token", slog.String("token", token))
+	logger.LogAttrs(ctx, slog.LevelInfo, "revoked token")
 }
 
 func respondWithError(w http.ResponseWriter, code int, reason string) {

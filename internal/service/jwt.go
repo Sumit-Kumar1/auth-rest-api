@@ -33,6 +33,7 @@ func GenerateToken(idSub, email string) (*models.TokenData, error) {
 		Email:    email,
 		ClaimUID: accID,
 		RegisteredClaims: jwt.RegisteredClaims{
+			Audience:  jwt.ClaimStrings{"todoapp"},
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Minute * 15)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 			NotBefore: jwt.NewNumericDate(time.Now()),
@@ -67,9 +68,10 @@ func GenerateToken(idSub, email string) (*models.TokenData, error) {
 	}
 
 	tkData := models.TokenData{
-		AccessID:         accID,
-		AccessExpiresAt:  claims.ExpiresAt.Unix(),
-		AccessToken:      accessTokenStr,
+		AccessID:        accID,
+		AccessExpiresAt: claims.ExpiresAt.Unix(),
+		AccessToken:     accessTokenStr,
+
 		RefreshID:        refID,
 		RefreshToken:     refTokenStr,
 		RefreshExpiresAt: refClaims.ExpiresAt.Unix(),

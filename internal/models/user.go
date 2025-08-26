@@ -15,6 +15,7 @@ type UserReq struct {
 // UserResp represents the response payload for user-related operations.
 // It contains the user information along with authentication tokens.
 type UserResp struct {
+	ID           string `json:"id,omitempty"`
 	Email        string `json:"email,omitempty"`
 	AccessToken  string `json:"accessToken,omitempty"`
 	RefreshToken string `json:"refreshToken,omitempty"`
@@ -23,7 +24,7 @@ type UserResp struct {
 // UserData represents the internal user data structure.
 // It contains the user's email and hashed password.
 type UserData struct {
-	ID       string `json:"-"`
+	ID       string `json:"id"`
 	Email    string `json:"email"`
 	Password []byte `json:"-"`
 }

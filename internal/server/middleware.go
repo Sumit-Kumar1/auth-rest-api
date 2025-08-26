@@ -76,7 +76,7 @@ func AuthMiddleware() Middleware {
 				return getJWTSecret(), nil
 			})
 			if err != nil || !token.Valid {
-				slog.Log(context.Background(), slog.LevelError, "invalid token", slog.String("token", tokenString))
+				slog.Log(context.Background(), slog.LevelError, "invalid token", slog.String("err", err.Error()))
 				http.Error(w, "Invalid token", http.StatusUnauthorized)
 
 				return
