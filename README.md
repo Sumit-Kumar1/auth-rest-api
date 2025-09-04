@@ -98,7 +98,7 @@ NOTE:
    ```
 
 ### Handling JWT tokens
-- for each user signin request, it create two token : `access_token, refresh_token`
+- for each user sign-in request, it creates two token : `access_token, refresh_token`
 - access token key linking token ID to user email, with expiration TTL
 - refresh token key linking token ID to user email, with expiration TTL
 - Sets tracking all active token IDs per user for access and refresh tokens

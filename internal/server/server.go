@@ -99,10 +99,10 @@ func WithEnv(env string) Opts {
 	}
 }
 
-// ServerFromEnvs creates a new Server instance using environment variables.
+// NewFromEnv creates a new Server instance using environment variables.
 // It loads configuration from environment variables and creates a server with those settings.
 // Returns an error if environment variables are invalid or server creation fails.
-func ServerFromEnvs() (*Server, error) {
+func NewFromEnv() (*Server, error) {
 	if err := godotenv.Load(".env"); err != nil {
 		log.Print("error while loading env file")
 

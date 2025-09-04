@@ -1,6 +1,7 @@
 package models
 
 import (
+	"errors"
 	"fmt"
 )
 
@@ -73,7 +74,9 @@ func (err constError) Error() string {
 // Is implements error comparison for constError.
 // It allows checking if an error matches a specific constError value.
 func (err constError) Is(target error) bool {
-	t, ok := target.(constError)
+	var t constError
+
+	ok := errors.As(target, &t)
 	if !ok {
 		return false
 	}
