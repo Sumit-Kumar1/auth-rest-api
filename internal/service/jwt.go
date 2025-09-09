@@ -44,12 +44,16 @@ func GenerateToken(idSub, email string) (*models.TokenData, error) {
 	}
 
 	refClaims := jwt.RegisteredClaims{
+		Audience:  jwt.ClaimStrings{"todoapp"},
 		ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour * 24)),
 		IssuedAt:  jwt.NewNumericDate(time.Now()),
+		Issuer:    "auth-rest-api",
 		Subject:   idSub,
+		ID:        jti,
 	}
 
 	accessKey, refKey := getJWTSecrets()
+
 	accessToken := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	refToken := jwt.NewWithClaims(jwt.SigningMethodHS256, Claims{
 		Email:            email,
@@ -68,10 +72,9 @@ func GenerateToken(idSub, email string) (*models.TokenData, error) {
 	}
 
 	tkData := models.TokenData{
-		AccessID:        accID,
-		AccessExpiresAt: claims.ExpiresAt.Unix(),
-		AccessToken:     accessTokenStr,
-
+		AccessID:         accID,
+		AccessExpiresAt:  claims.ExpiresAt.Unix(),
+		AccessToken:      accessTokenStr,
 		RefreshID:        refID,
 		RefreshToken:     refTokenStr,
 		RefreshExpiresAt: refClaims.ExpiresAt.Unix(),
@@ -95,11 +98,11 @@ func ParseToken(tokenString, tokenType string) (*Claims, error) {
 	case "access":
 		token, err = jwt.ParseWithClaims(tokenString, &Claims{}, func(_ *jwt.Token) (any, error) {
 			return accSecret, nil
-		})
+		}, jwt.WithExpirationRequired(), jwt.WithStrictDecoding())
 	case "refresh":
 		token, err = jwt.ParseWithClaims(tokenString, &Claims{}, func(_ *jwt.Token) (any, error) {
 			return refSecret, nil
-		})
+		}, jwt.WithExpirationRequired(), jwt.WithStrictDecoding())
 	default:
 		return nil, models.ErrInvalid("token type")
 	}

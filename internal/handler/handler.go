@@ -78,12 +78,7 @@ func (h *Handler) SignUp(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	w.WriteHeader(http.StatusCreated)
-
-	if _, err := w.Write([]byte("User created successfully")); err != nil {
-		logger.LogAttrs(ctx, slog.LevelError, "failed to write response", slog.String("error", err.Error()))
-	}
-
+	writeData(w, http.StatusCreated, "user created successfully")
 	logger.LogAttrs(ctx, slog.LevelInfo, "user signed up successfully", slog.String("email", u.Email))
 }
 
@@ -137,18 +132,12 @@ func (h *Handler) SignIn(w http.ResponseWriter, r *http.Request) {
 		RefreshToken: tokenResp.RefreshToken,
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
-
-	if err := json.NewEncoder(w).Encode(resp); err != nil {
-		http.Error(w, "Failed to write response", http.StatusInternalServerError)
-	}
-
+	writeData(w, http.StatusCreated, resp)
 	logger.LogAttrs(ctx, slog.LevelInfo, "user signed in", slog.String("email", u.Email))
 }
 
 func (h *Handler) RefreshToken(w http.ResponseWriter, r *http.Request) {
-	var t = struct {
+	t := struct {
 		Token string `json:"refreshToken"`
 	}{}
 
@@ -182,17 +171,12 @@ func (h *Handler) RefreshToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userResp := models.UserResp{AccessToken: tokenResp.AccessToken,
-		RefreshToken: tokenResp.RefreshToken}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-
-	if err := json.NewEncoder(w).Encode(userResp); err != nil {
-		logger.LogAttrs(ctx, slog.LevelError, "failed to write response", slog.String("error", err.Error()))
-		return
+	userResp := models.UserResp{
+		AccessToken:  tokenResp.AccessToken,
+		RefreshToken: tokenResp.RefreshToken,
 	}
 
+	writeData(w, http.StatusOK, userResp)
 	logger.LogAttrs(ctx, slog.LevelInfo, "user refreshed token")
 }
 
@@ -217,8 +201,7 @@ func (h *Handler) RevokeToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.WriteHeader(http.StatusNoContent)
-
+	writeData(w, http.StatusNoContent, "token revoked successfully")
 	logger.LogAttrs(ctx, slog.LevelInfo, "revoked token")
 }
 
@@ -231,4 +214,17 @@ func respondWithError(w http.ResponseWriter, code int, reason string) {
 	if err := json.NewEncoder(w).Encode(errHTTP); err != nil {
 		http.Error(w, "failed to write response", http.StatusInternalServerError)
 	}
+}
+
+func writeData[T any](w http.ResponseWriter, code int, resp T) {
+	w.WriteHeader(code)
+	w.Header().Set("Content-Type", "application/json")
+
+	data, err := json.Marshal(resp)
+	if err != nil {
+		respondWithError(w, http.StatusServiceUnavailable, err.Error())
+		return
+	}
+
+	_, _ = w.Write(json.RawMessage(`{"data":` + string(data) + `}`))
 }

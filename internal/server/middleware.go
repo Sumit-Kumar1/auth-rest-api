@@ -16,8 +16,9 @@ import (
 type ContextKey string
 
 const (
-	CorrelationID ContextKey = "correlationId"
-	Logger        ContextKey = "logger"
+	CorrelationID     ContextKey = "correlationId"
+	Logger            ContextKey = "logger"
+	headerCorrelation            = "X-Correlation-ID"
 )
 
 // Middleware is a function type that wraps an HTTP handler.
@@ -41,10 +42,13 @@ func Chain(f http.HandlerFunc, middlewares ...Middleware) http.HandlerFunc {
 func AddCorrelation() Middleware {
 	return func(f http.HandlerFunc) http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) {
-			corrID := uuid.NewString()
+			corrID := r.Header.Get(headerCorrelation)
+			if strings.TrimSpace(corrID) == "" {
+				corrID = uuid.NewString()
+			}
 
 			logger := slog.With(slog.Group("request",
-				slog.String(string(CorrelationID), corrID),
+				slog.String(string(headerCorrelation), corrID),
 				slog.String("method", r.Method),
 				slog.String("path", r.URL.Path),
 				slog.String("host", r.Host),
