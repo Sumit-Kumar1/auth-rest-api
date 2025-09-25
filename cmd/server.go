@@ -12,7 +12,7 @@ import (
 	"auth-rest-api/internal/store"
 )
 
-// It initializes the server, sets up HTTP handlers, and starts the server.
+// Run It initializes the server, sets up HTTP handlers, and starts the server.
 // It also handles graceful shutdown when the application receives an interrupt signal.
 func Run(ctx context.Context) error {
 	app, err := server.ServerFromEnvs()

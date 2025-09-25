@@ -1,11 +1,12 @@
 package main
 
 import (
-	"auth-rest-api/cmd"
 	"context"
 	"log/slog"
 	"os"
 	"os/signal"
+
+	"auth-rest-api/cmd"
 )
 
 func main() {

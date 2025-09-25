@@ -16,7 +16,7 @@ import (
 type Claims struct {
 	Email    string `json:"email"`
 	ClaimUID string `json:"claimID"`
-	// regsiteredClaim's subject is userID from db
+	// registeredClaim's subject is userID from db
 	jwt.RegisteredClaims
 }
 
@@ -45,7 +45,7 @@ func GenerateToken(idSub, email string) (*models.TokenData, error) {
 
 	refClaims := jwt.RegisteredClaims{
 		Audience:  jwt.ClaimStrings{"todoapp"},
-		ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour * 24)),
+		ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Minute * 4)),
 		IssuedAt:  jwt.NewNumericDate(time.Now()),
 		Issuer:    "auth-rest-api",
 		Subject:   idSub,

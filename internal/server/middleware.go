@@ -48,7 +48,7 @@ func AddCorrelation() Middleware {
 			}
 
 			logger := slog.With(slog.Group("request",
-				slog.String(string(headerCorrelation), corrID),
+				slog.String(headerCorrelation, corrID),
 				slog.String("method", r.Method),
 				slog.String("path", r.URL.Path),
 				slog.String("host", r.Host),
