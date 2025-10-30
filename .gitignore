@@ -23,11 +23,12 @@ testdata/
 go.work
 go.work.sum
 
-
-
 # additional toolchain and IDE specifics
 .idea
 .vscode
 
 # air specific builds
 /tmp
+
+secrets/
+.env

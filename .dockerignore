@@ -1,0 +1,13 @@
+.git
+.gitignore
+README.md
+Dockerfile
+docker-compose.yml
+docker-compose.*.yml
+node_modules
+*.log
+.env
+secrets/
+dist/
+build/
+.coverage

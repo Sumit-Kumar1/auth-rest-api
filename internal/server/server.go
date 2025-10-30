@@ -104,9 +104,8 @@ func WithEnv(env string) Opts {
 // Returns an error if environment variables are invalid or server creation fails.
 func NewFromEnv() (*Server, error) {
 	if err := godotenv.Load(".env"); err != nil {
-		log.Print("error while loading env file")
-
-		return nil, err
+		log.Printf(".env file not found: %v", err)
+		log.Printf("continuing loading system / docker env variables")
 	}
 
 	opts := loadEnvVars()
