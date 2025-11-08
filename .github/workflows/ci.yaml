@@ -1,9 +1,11 @@
-name: CI
+"name": CI
 
 on:
   push:
     branches:
       - "*"
+      - "!main"
+      - "!development"
   pull_request:
     branches:
       - main
@@ -35,12 +37,6 @@ jobs:
       - name: Run tests
         run: go test -v -race -coverprofile=coverage.txt -covermode=atomic ./...
 
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v3
-        with:
-          file: ./coverage.txt
-          fail_ci_if_error: false
-
   docker:
     name: Build Docker Image
     needs: build
@@ -66,4 +62,4 @@ jobs:
           push: true
           tags: ${{ secrets.DOCKER_USERNAME }}/auth-rest-api:latest
           cache-from: type=registry,ref=${{ secrets.DOCKER_USERNAME }}/auth-rest-api:buildcache
-          cache-to: type=registry,ref=${{ secrets.DOCKER_USERNAME }}/auth-rest-api:buildcache,mode=max
+          cache-to: type=registry,ref=${{ secrets.DOCKER_USERNAME }}/auth-rest-api:buildcache,mode=max"
