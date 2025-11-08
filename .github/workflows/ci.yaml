@@ -3,11 +3,11 @@ name: CI
 on:
   push:
     branches:
-        - '*'
+      - "*"
   pull_request:
     branches:
-        - main
-        - development
+      - main
+      - development
 
 jobs:
   build:
@@ -19,15 +19,15 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v4
         with:
-          go-version: '1.24'
+          go-version: "1.24"
           cache: true
           cache-dependency-path: go.sum
-          
+
       - name: Install dependencies
         run: go mod download
 
       - name: Run linter
-        uses: golangci/golangci-lint-action@v3
+        uses: golangci/golangci-lint-action@v9
         with:
           version: latest
           args: --timeout=5m
