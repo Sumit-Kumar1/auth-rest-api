@@ -12,9 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-var (
-	errRedis = errors.New("redis error")
-)
+var errRedis = errors.New("redis error")
 
 func TestStore_CreateUser(t *testing.T) {
 	db, mock := redismock.NewClientMock()
@@ -22,6 +20,7 @@ func TestStore_CreateUser(t *testing.T) {
 	ctx := context.Background()
 	email := "dummy@testmail.com"
 	passwd := []byte(uuid.NewString())
+	usrID := uuid.NewString()
 
 	tests := []struct {
 		name     string
@@ -30,27 +29,36 @@ func TestStore_CreateUser(t *testing.T) {
 		wantErr  error
 	}{
 		{
-			name:     "valid case",
-			user:     &models.UserData{ID: uuid.NewString(), Email: email, Password: passwd},
-			mockCall: func() { mock.ExpectHSet("users", email, passwd).SetVal(1) },
+			name: "valid case",
+			user: &models.UserData{ID: usrID, Email: email, Password: passwd},
+			mockCall: func() {
+				mock.ExpectSet(emaild+email, usrID, 0).SetVal("1")
+				mock.ExpectHSet(userd+usrID, map[string]any{
+					"id": usrID, "email": email, "password": passwd,
+				}).SetVal(1)
+			},
 		},
 		{
 			name:     "email entry create nil",
-			user:     &models.UserData{Email: email, Password: passwd},
-			mockCall: func() { mock.ExpectHSet("users", email, passwd).RedisNil() },
+			user:     &models.UserData{ID: usrID, Email: email, Password: passwd},
+			mockCall: func() { mock.ExpectSet(emaild+email, usrID, 0).RedisNil() },
 			wantErr:  models.ErrUserAlreadyExists,
 		},
 		{
 			name:     "db error",
-			user:     &models.UserData{Email: email, Password: passwd},
-			mockCall: func() { mock.ExpectHSet("users", email, passwd).SetErr(models.ErrDBNotConnected) },
+			user:     &models.UserData{ID: usrID, Email: email, Password: passwd},
+			mockCall: func() { mock.ExpectSet(emaild+email, usrID, 0).SetErr(models.ErrDBNotConnected) },
 			wantErr:  models.ErrDBNotConnected,
 		},
 		{
-			name:     "email entry found",
-			user:     &models.UserData{Email: email, Password: passwd},
-			mockCall: func() { mock.ExpectHSet("users", email, passwd).SetVal(0) },
-			wantErr:  models.ErrUserAlreadyExists,
+			name: "email entry found",
+			user: &models.UserData{ID: usrID, Email: email, Password: passwd},
+			mockCall: func() {
+				mock.ExpectSet(emaild+email, usrID, 0).SetVal("0")
+				mock.ExpectHSet(userd+usrID, map[string]any{
+					"id": usrID, "email": email, "password": passwd}).RedisNil()
+			},
+			wantErr: models.ErrUserAlreadyExists,
 		},
 	}
 
@@ -71,43 +79,48 @@ func TestStore_GetUserByEmail(t *testing.T) {
 	ctx := context.Background()
 	email := "dummy@testmail.com"
 	passwd := uuid.NewString()
+	usrID := uuid.NewString()
+	resp := map[string]string{
+		"id": usrID, "email": email, "password": passwd,
+	}
 
 	tests := []struct {
 		name     string
 		email    string
-		mockCall func()
+		mockCall func(mock redismock.ClientMock)
 		want     *models.UserData
 		wantErr  error
 	}{
 		{
-			name:     "valid case",
-			email:    email,
-			mockCall: func() { mock.ExpectHGet("users", email).SetVal(passwd) },
-			want:     &models.UserData{Email: email, Password: []byte(passwd)},
+			name:  "valid case",
+			email: email,
+			mockCall: func(mock redismock.ClientMock) {
+				mock.ExpectGet(emaild + email).SetVal(usrID)
+				mock.ExpectHGetAll(userd + usrID).SetVal(resp)
+			},
+			want: &models.UserData{ID: usrID, Email: email, Password: []byte(passwd)},
 		},
 		{
-			name:     "empty password",
-			email:    email,
-			mockCall: func() { mock.ExpectHGet("users", email).SetVal("") },
-			wantErr:  models.ErrUserNotFound,
+			name:  "no entry for email",
+			email: email,
+			mockCall: func(mock redismock.ClientMock) {
+				mock.ExpectGet(emaild + email).RedisNil()
+			},
+			wantErr: models.ErrUserNotFound,
 		},
 		{
-			name:     "no entry for email",
-			email:    email,
-			mockCall: func() { mock.ExpectHGet("users", email).RedisNil() },
-			wantErr:  models.ErrUserNotFound,
-		},
-		{
-			name:     "redis error",
-			email:    email,
-			mockCall: func() { mock.ExpectHGet("users", email).SetErr(models.ErrDBNotConnected) },
-			wantErr:  models.ErrDBNotConnected,
+			name:  "redis error",
+			email: email,
+			mockCall: func(mock redismock.ClientMock) {
+				mock.ExpectGet(emaild + email).SetErr(models.ErrDBNotConnected)
+			},
+			wantErr: models.ErrDBNotConnected,
 		},
 	}
 
 	for i, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tt.mockCall()
+			tt.mockCall(mock)
 
 			got, err := s.GetUserByEmail(ctx, tt.email)
 			assert.Equalf(t, tt.wantErr, err, "TEST[%d] Failed - %s", i, tt.name)

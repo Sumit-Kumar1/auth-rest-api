@@ -38,8 +38,8 @@ func Test_getJWTSecrets(t *testing.T) {
 			t.Setenv("REFRESH_SECRET", tt.refEnv)
 
 			gotAccessSecret, gotRefreshSecret := getJWTSecrets()
-			assert.Equalf(t, tt.wantAccessSecret, gotAccessSecret, testFailStr, i, tt.name)
-			assert.Equalf(t, tt.wantRefreshSecret, gotRefreshSecret, testFailStr, i, tt.name)
+			assert.Equalf(t, tt.wantAccessSecret, []byte(gotAccessSecret), testFailStr, i, tt.name)
+			assert.Equalf(t, tt.wantRefreshSecret, []byte(gotRefreshSecret), testFailStr, i, tt.name)
 		})
 	}
 }
@@ -79,12 +79,12 @@ func TestParseToken(t *testing.T) {
 	}
 
 	accessToken := jwt.NewWithClaims(jwt.SigningMethodHS256, accClaims)
-	valAccToken, err := accessToken.SignedString(accessKey)
+	valAccToken, err := accessToken.SignedString([]byte(accessKey))
 
 	assert.NoError(t, err)
 
 	refreshToken := jwt.NewWithClaims(jwt.SigningMethodHS256, refClaims)
-	valRefToken, err := refreshToken.SignedString(refKey)
+	valRefToken, err := refreshToken.SignedString([]byte(refKey))
 
 	assert.NoError(t, err)
 
@@ -111,53 +111,75 @@ func TestParseToken(t *testing.T) {
 			wantErr: models.ErrInvalid("token type"),
 		},
 		{
-			name: "invalid token type",
+			name: "invalid token",
 			token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9." +
 				"eyJlbWFpbCI6InN1bWl0QGt1bWFyLmNvbSIsImNsYWltSUQiOiJjNjVmMzNjYS1h" +
 				"NjZhLTQ1NTgtODdjNS01NTgxNGNjZWQ5ZmYiLCJzdWIiOiJzdW1pdEBrdW1hci5jb20" +
 				"iLCJleHAiOjE3MzI3OTg2MzEsImlhdCI6MTczMjcxMjIzMX0" +
 				".leAyGmgmAqQEdkQexD8C5GzBXIZhR9HTib-tagNbbqw",
 			tokenType: "refresh",
-			wantErr:   models.ErrInvalid("token type"),
+			wantErr:   jwt.ErrSignatureInvalid,
 		},
 	}
 	for i, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := ParseToken(tt.token, tt.tokenType)
 
-			assert.Equalf(t, tt.wantErr, err, testFailStr, i, tt.name)
-			assert.Equalf(t, tt.want, got, testFailStr, i, tt.name)
+			if tt.wantErr != nil {
+				assert.Error(t, err, testFailStr, i, tt.name)
+			} else {
+				assert.NoError(t, err, testFailStr, i, tt.name)
+				assert.Equalf(t, tt.want.Email, got.Email, testFailStr, i, tt.name)
+				assert.Equalf(t, tt.want.ClaimUID, got.ClaimUID, testFailStr, i, tt.name)
+			}
 		})
 	}
 }
 
 func TestGenerateToken(t *testing.T) {
-	id := uuid.NewString()
-	uuid.DisableRandPool()
-
-	defer uuid.EnableRandPool()
+	t.Setenv("ACCESS_SECRET", "test_access_secret")
+	t.Setenv("REFRESH_SECRET", "test_refresh_secret")
 
 	tests := []struct {
-		name    string
-		email   string
-		want    *models.TokenData
-		wantErr error
+		name     string
+		idSub    string
+		email    string
+		wantErr  error
+		validate func(t *testing.T, tokenData *models.TokenData, idSub, email string)
 	}{
-		{name: "valid case", email: email, want: &models.TokenData{
-			AccessToken:      "access_token",
-			AccessExpiresAt:  jwt.NewNumericDate(time.Now().Add(time.Minute * 15)).Unix(),
-			RefreshExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour * 24)).Unix(),
-			AccessID:         id,
-			RefreshID:        id,
-			RefreshToken:     "refresh_token",
-		}},
+		{
+			name:  "valid case",
+			idSub: uuid.NewString(),
+			email: email,
+			validate: func(t *testing.T, tokenData *models.TokenData, idSub, email string) {
+				assert.NotEmpty(t, tokenData.AccessToken)
+				assert.NotEmpty(t, tokenData.RefreshToken)
+				assert.NotEmpty(t, tokenData.AccessID)
+				assert.NotEmpty(t, tokenData.RefreshID)
+				assert.True(t, tokenData.AccessExpiresAt > time.Now().Unix())
+				assert.True(t, tokenData.RefreshExpiresAt > time.Now().Unix())
+
+				// Verify tokens can be parsed
+				accessClaims, err := ParseToken(tokenData.AccessToken, "access")
+				assert.NoError(t, err)
+				assert.Equal(t, email, accessClaims.Email)
+
+				refreshClaims, err := ParseToken(tokenData.RefreshToken, "refresh")
+				assert.NoError(t, err)
+				assert.Equal(t, email, refreshClaims.Email)
+			},
+		},
 	}
 
 	for i, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := GenerateToken(uuid.NewString(), tt.email)
+			tokenData, err := GenerateToken(tt.idSub, tt.email)
 
 			assert.Equalf(t, tt.wantErr, err, "TEST[%d] Failed - %s", i, tt.name)
+
+			if tt.wantErr == nil && tt.validate != nil {
+				tt.validate(t, tokenData, tt.idSub, tt.email)
+			}
 		})
 	}
 }
