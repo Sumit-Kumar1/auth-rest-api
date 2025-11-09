@@ -32,7 +32,6 @@ linters:
     - unparam
     - unused
     - whitespace
-    - wsl_v5
   settings:
     gocyclo:
       min-complexity: 10
@@ -110,4 +109,4 @@ run:
   timeout: 5m
   allow-parallel-runners: true
   concurrency: 4
-  go: "1.24"
+  go: "1.25"
