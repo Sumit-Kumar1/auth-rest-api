@@ -1,6 +1,6 @@
 module auth-rest-api
 
-go 1.25
+go 1.24.9
 
 require (
 	github.com/go-redis/redismock/v9 v9.2.0
