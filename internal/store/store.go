@@ -12,7 +12,12 @@ import (
 )
 
 const (
-	userTable = "users"
+	userd         = "user:"
+	emaild        = "email:"
+	refTokend     = "refresh_tokens:"
+	accTokend     = "access_tokens:"
+	userRefTokend = "user_refresh_tokens:"
+	userAccTokend = "user_access_tokens:"
 )
 
 // Store represents the data storage layer.
@@ -22,17 +27,14 @@ type Store struct {
 }
 
 // New creates a new Store instance with the provided Redis client.
-// It initializes the store with the required database connection.
 func New(db *redis.Client) *Store {
 	return &Store{DB: db}
 }
 
 // CreateUser stores a new user in the database.
-// It uses Redis HSET to store the user data with email as the key.
-// Returns an error if the user already exists or if the operation fails.
 func (s *Store) CreateUser(ctx context.Context, user *models.UserData) error {
-	val, err := s.DB.HSet(ctx, userTable, user.Email, user.Password).Result()
-	if err != nil {
+	// Store email → user_id mapping, this helps in getEmail calls
+	if err := s.DB.Set(ctx, emaild+user.Email, user.ID, 0).Err(); err != nil {
 		if errors.Is(err, redis.Nil) {
 			return models.ErrUserAlreadyExists
 		}
@@ -40,73 +42,78 @@ func (s *Store) CreateUser(ctx context.Context, user *models.UserData) error {
 		return err
 	}
 
-	if val == 0 {
-		return models.ErrUserAlreadyExists
+	// store user hash data with uniqueness of userId
+	if err := s.DB.HSet(ctx, userd+user.ID, map[string]any{
+		"id": user.ID, "email": user.Email, "password": user.Password}).Err(); err != nil {
+		if errors.Is(err, redis.Nil) {
+			return models.ErrUserAlreadyExists
+		}
+
+		return err
 	}
 
 	return nil
 }
 
 // GetUserByEmail retrieves a user from the database by their email.
-// It uses Redis HGET to fetch the user data.
-// Returns nil and an error if the user is not found or if the operation fails.
-func (s *Store) GetUserByEmail(ctx context.Context, email string) (*models.UserData, error) {
-	passwd, err := s.DB.HGet(ctx, userTable, email).Result()
-	if err != nil {
-		if errors.Is(err, redis.Nil) {
-			return nil, models.ErrNotFound("user")
-		}
-
+func (s *Store) GetUserByEmail(ctx context.Context, userEmail string) (*models.UserData, error) {
+	userID, err := s.DB.Get(ctx, emaild+userEmail).Result()
+	if errors.Is(err, redis.Nil) {
+		return nil, models.ErrUserNotFound
+	} else if err != nil {
 		return nil, err
 	}
 
-	if passwd == "" {
-		return nil, models.ErrNotFound("user")
+	data, err := s.DB.HGetAll(ctx, userd+userID).Result()
+	if err != nil {
+		return nil, err
 	}
 
-	return &models.UserData{Email: email, Password: []byte(passwd)}, nil
+	if len(data) == 0 {
+		return nil, models.ErrUserNotFound
+	}
+
+	return &models.UserData{ID: data["id"], Email: data["email"], Password: []byte(data["password"])}, nil
 }
 
 // CreateToken stores a new token in the database.
-// It uses Redis SET to store the token data with appropriate expiration.
-// Returns an error if the operation fails.
 func (s *Store) CreateToken(ctx context.Context, email string, td *models.TokenData) error {
-	accExp := time.Unix(td.AccessExpiresAt, 0)
-	refExp := time.Unix(td.RefreshExpiresAt, 0)
+	accExp := time.Until(time.Unix(td.AccessExpiresAt, 0))
+	refExp := time.Until(time.Unix(td.RefreshExpiresAt, 0))
 
-	if err := s.DB.Set(ctx, td.AccessID, email, time.Until(accExp)).Err(); err != nil {
-		return err
-	}
+	tx := s.DB.TxPipeline()
 
-	if err := s.DB.Set(ctx, td.RefreshID, email, time.Until(refExp)).Err(); err != nil {
-		return err
-	}
+	tx.Set(ctx, accTokend+td.AccessID, email, accExp)
+	tx.SAdd(ctx, userAccTokend+email, td.AccessID)
 
-	return nil
+	tx.Set(ctx, refTokend+td.RefreshID, email, refExp)
+	tx.SAdd(ctx, userRefTokend+email, td.RefreshID)
+
+	_, err := tx.Exec(ctx)
+
+	return err
 }
 
 // DeleteToken removes one or more tokens from the database.
-// It uses Redis DEL to remove the specified tokens.
-// Returns an error if the operation fails.
-func (s *Store) DeleteToken(ctx context.Context, tokenID ...string) error {
-	val, err := s.DB.Del(ctx, tokenID...).Result()
-	if err != nil {
-		return err
+func (s *Store) DeleteToken(ctx context.Context, email, accTokenID, refTokenID string) error {
+	tx := s.DB.TxPipeline()
+
+	tx.Del(ctx, accTokend+accTokenID)
+	tx.SRem(ctx, userAccTokend+email, accTokenID)
+
+	if refTokenID != "" {
+		tx.Del(ctx, refTokend+refTokenID)
+		tx.SRem(ctx, userRefTokend+email, refTokenID)
 	}
 
-	if val != int64(len(tokenID)) {
-		return models.NewConstError("delete error")
-	}
+	_, err := tx.Exec(ctx)
 
-	return nil
+	return err
 }
 
-// IsTokenRevoked checks if a token has been revoked.
-// It uses Redis EXISTS to check if the token ID exists in the database.
-// Returns true if the token is revoked, false otherwise.
-// Returns an error if the operation fails.
+// IsTokenRevoked checks if a token has been revoked (token doesn't exist).
 func (s *Store) IsTokenRevoked(ctx context.Context, tokenID string) (bool, error) {
-	val, err := s.DB.Exists(ctx, tokenID).Result()
+	val, err := s.DB.Exists(ctx, accTokend+tokenID).Result()
 	if err != nil {
 		if errors.Is(err, redis.Nil) {
 			return true, nil

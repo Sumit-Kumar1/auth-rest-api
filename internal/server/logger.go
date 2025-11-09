@@ -42,5 +42,9 @@ func newLogger() *slog.Logger {
 		},
 	}
 
-	return slog.New(slog.NewJSONHandler(os.Stdout, opts))
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, opts))
+
+	slog.SetDefault(logger)
+
+	return logger
 }

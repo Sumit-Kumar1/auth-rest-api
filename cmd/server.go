@@ -12,10 +12,10 @@ import (
 	"auth-rest-api/internal/store"
 )
 
-// It initializes the server, sets up HTTP handlers, and starts the server.
+// Run It initializes the server, sets up HTTP handlers, and starts the server.
 // It also handles graceful shutdown when the application receives an interrupt signal.
 func Run(ctx context.Context) error {
-	app, err := server.ServerFromEnvs()
+	app, err := server.NewFromEnv()
 	if err != nil {
 		slog.LogAttrs(ctx, slog.LevelError, "failed to create server", slog.Any("error", err))
 		return err
@@ -47,6 +47,7 @@ func Run(ctx context.Context) error {
 	}
 
 	app.Logger.LogAttrs(ctx, slog.LevelInfo, "application is shut down", slog.String("name", app.Name))
+
 	return nil
 }
 

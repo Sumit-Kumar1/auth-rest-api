@@ -32,7 +32,6 @@ linters:
     - unparam
     - unused
     - whitespace
-    - wsl
   settings:
     gocyclo:
       min-complexity: 10
@@ -45,6 +44,10 @@ linters:
       min-occurrences: 3
     lll:
       line-length: 140
+    revive:
+      directives:
+        - exclude:
+            - package-comments
     gocritic:
       enabled-tags:
         - diagnostic

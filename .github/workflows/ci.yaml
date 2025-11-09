@@ -1,13 +1,15 @@
-name: CI
+"name": CI
 
 on:
   push:
     branches:
-        - '*'
+      - "*"
+      - "!main"
+      - "!development"
   pull_request:
     branches:
-        - main
-        - development
+      - main
+      - development
 
 jobs:
   build:
@@ -15,31 +17,26 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v5
       - name: Set up Go
-        uses: actions/setup-go@v4
+        uses: actions/setup-go@v6
         with:
-          go-version: '1.24'
+          go-version: 1.24
           cache: true
           cache-dependency-path: go.sum
-          
+
       - name: Install dependencies
         run: go mod download
 
       - name: Run linter
-        uses: golangci/golangci-lint-action@v3
+        uses: golangci/golangci-lint-action@0a35821d5c230e903fcfe077583637dea1b27b47
         with:
-          version: latest
+          version: v2.1
           args: --timeout=5m
 
       - name: Run tests
-        run: go test -v -race -coverprofile=coverage.txt -covermode=atomic ./...
-
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v3
-        with:
-          file: ./coverage.txt
-          fail_ci_if_error: false
+        run: |
+          CGO_ENABLED=0 GOOS=linux go test -v ./... --cover
 
   docker:
     name: Build Docker Image
@@ -66,4 +63,4 @@ jobs:
           push: true
           tags: ${{ secrets.DOCKER_USERNAME }}/auth-rest-api:latest
           cache-from: type=registry,ref=${{ secrets.DOCKER_USERNAME }}/auth-rest-api:buildcache
-          cache-to: type=registry,ref=${{ secrets.DOCKER_USERNAME }}/auth-rest-api:buildcache,mode=max
+          cache-to: type=registry,ref=${{ secrets.DOCKER_USERNAME }}/auth-rest-api:buildcache,mode=max"

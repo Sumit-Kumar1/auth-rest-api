@@ -51,7 +51,7 @@ func NewServer(opts ...Opts) (*Server, error) {
 
 	s.Logger = newLogger()
 
-	db, err := newDB(s.Logger)
+	db, err := getDatabase(s.Logger)
 	if err != nil {
 		return nil, err
 	}
@@ -99,14 +99,13 @@ func WithEnv(env string) Opts {
 	}
 }
 
-// ServerFromEnvs creates a new Server instance using environment variables.
+// NewFromEnv creates a new Server instance using environment variables.
 // It loads configuration from environment variables and creates a server with those settings.
 // Returns an error if environment variables are invalid or server creation fails.
-func ServerFromEnvs() (*Server, error) {
+func NewFromEnv() (*Server, error) {
 	if err := godotenv.Load(".env"); err != nil {
-		log.Print("error while loading env file")
-
-		return nil, err
+		log.Printf(".env file not found: %v", err)
+		log.Printf("continuing loading system / docker env variables")
 	}
 
 	opts := loadEnvVars()
