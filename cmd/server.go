@@ -12,8 +12,8 @@ import (
 	"auth-rest-api/internal/store"
 )
 
-// Run It initializes the server, sets up HTTP handlers, and starts the server.
-// It also handles graceful shutdown when the application receives an interrupt signal.
+// Run initializes the server, sets up HTTP handlers, and starts the server.
+// It handles graceful shutdown when the application receives an interrupt signal.
 func Run(ctx context.Context) error {
 	app, err := server.NewFromEnv()
 	if err != nil {
@@ -21,18 +21,10 @@ func Run(ctx context.Context) error {
 		return err
 	}
 
-	newHTTPHandler(app)
+	setupHandlers(app)
 
 	srvErr := make(chan error, 1)
-	go func() {
-		app.Logger.LogAttrs(ctx, slog.LevelInfo, "application is running",
-			slog.Group("server", slog.String("name", app.Name), slog.String("address", app.Addr),
-				slog.Bool("DB Connected", true), slog.Group("timeouts (durations)", slog.Duration("read", app.ReadTimeout),
-					slog.Duration("write", app.WriteTimeout), slog.Duration("idle", app.IdleTimeout))))
-
-		app.Handler = app.Mux
-		srvErr <- app.ListenAndServe()
-	}()
+	go startServer(ctx, app, srvErr)
 
 	select {
 	case err = <-srvErr:
@@ -40,67 +32,160 @@ func Run(ctx context.Context) error {
 	case <-ctx.Done():
 	}
 
-	err = app.Shutdown(context.Background())
-	if err != nil {
-		app.Logger.LogAttrs(ctx, slog.LevelError, "error while shutting down", slog.String("error", err.Error()))
-		return err
-	}
-
-	app.Logger.LogAttrs(ctx, slog.LevelInfo, "application is shut down", slog.String("name", app.Name))
-
-	return nil
+	return gracefulShutdown(ctx, app)
 }
 
-// newHTTPHandler sets up the HTTP handlers for the application.
-// It initializes the store, service, and handler layers, and registers the routes.
-// The function configures the server's HTTP router with all necessary endpoints.
-func newHTTPHandler(app *server.Server) {
+// setupHandlers initializes the application layers and registers all HTTP routes
+func setupHandlers(app *server.Server) {
 	st := store.New(app.DB.Client)
 	svc := service.New(st)
 	h := handler.New(svc)
 
-	app.Mux.HandleFunc("POST /signup", server.Chain(h.SignUp, server.AddCorrelation()))
-	app.Mux.HandleFunc("POST /signin", server.Chain(h.SignIn, server.AddCorrelation()))
-	app.Mux.HandleFunc("POST /refresh", server.Chain(h.RefreshToken, server.AddCorrelation(), server.AuthMiddleware()))
-	app.Mux.HandleFunc("POST /revoke", server.Chain(h.RevokeToken, server.AddCorrelation(), server.AuthMiddleware()))
+	registerAuthRoutes(app, h)
+	registerHealthRoute(app)
+}
 
-	app.Mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
+// registerAuthRoutes registers all authentication-related endpoints
+func registerAuthRoutes(app *server.Server, h *handler.Handler) {
+	authMiddleware := server.AuthMiddleware()
+	correlationMiddleware := server.AddCorrelation()
+
+	authEndpoints := []struct {
+		methodPath string
+		handler    http.HandlerFunc
+		middleware []server.Middleware
+	}{
+		{"POST /signup", h.SignUp, []server.Middleware{correlationMiddleware}},
+		{"POST /signin", h.SignIn, []server.Middleware{correlationMiddleware}},
+		{"POST /refresh", h.RefreshToken, []server.Middleware{correlationMiddleware, authMiddleware}},
+		{"POST /revoke", h.RevokeToken, []server.Middleware{correlationMiddleware, authMiddleware}},
+	}
+
+	for _, endpoint := range authEndpoints {
+		app.Mux.HandleFunc(endpoint.methodPath, server.Chain(endpoint.handler, endpoint.middleware...))
+	}
+}
+
+// registerHealthRoute registers the health check endpoint
+func registerHealthRoute(app *server.Server) {
+	app.Mux.HandleFunc("GET /health", healthHandler(app))
+}
+
+// healthHandler returns the HTTP handler for health checks
+func healthHandler(app *server.Server) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 
-		if err := app.DB.Client.Ping(context.Background()); err != nil {
-			app.Health = &server.Health{
-				Status:   "Down",
-				DBStatus: "Down",
-			}
+		healthStatus := checkSystemHealth(ctx, app)
+		logHealthStatus(ctx, app, healthStatus)
+		sendHealthResponse(w, app, healthStatus)
+	}
+}
 
-			data, mErr := json.Marshal(app.Health)
-			if mErr != nil {
-				http.Error(w, "not able to marshal the health status", http.StatusInternalServerError)
-				return
-			}
+// checkSystemHealth performs all health checks and returns the overall status
+func checkSystemHealth(ctx context.Context, app *server.Server) *server.Health {
+	dbHealthy := checkDatabaseHealth(ctx, app)
 
-			app.Logger.LogAttrs(ctx, slog.LevelDebug, "health status", slog.Any("status", app.Health))
+	status := "Up"
+	dbStatus := "Up"
+	httpStatus := http.StatusOK
 
-			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write(data)
+	if !dbHealthy {
+		status = "Down"
+		dbStatus = "Down"
+		httpStatus = http.StatusServiceUnavailable
+	}
 
-			return
-		}
+	return &server.Health{
+		Status:     status,
+		DBStatus:   dbStatus,
+		StatusCode: httpStatus,
+	}
+}
 
-		app.Health = &server.Health{
-			Status:   "Up",
-			DBStatus: "Up",
-		}
+// checkDatabaseHealth verifies database connectivity
+func checkDatabaseHealth(ctx context.Context, app *server.Server) bool {
+	const pong = "PONG"
 
-		app.Logger.LogAttrs(ctx, slog.LevelDebug, "health status", slog.Any("status", app.Health))
+	if app.DB == nil {
+		app.Logger.LogAttrs(ctx, slog.LevelWarn, "database health check failed",
+			slog.String("error", "nil db object"))
+		return false
+	}
 
-		data, mErr := json.Marshal(app.Health)
-		if mErr != nil {
-			http.Error(w, "not able to marshal the health status", http.StatusInternalServerError)
-			return
-		}
+	statusCmd := app.DB.Client.Ping(ctx)
+	res, err := statusCmd.Result()
+	if err != nil {
+		app.Logger.LogAttrs(ctx, slog.LevelWarn, "database health check failed",
+			slog.String("error", err.Error()))
+		return false
+	}
 
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write(data)
-	})
+	if res != pong {
+		app.Logger.LogAttrs(ctx, slog.LevelInfo, "database health check failed")
+		return false
+	}
+
+	return true
+}
+
+// logHealthStatus logs the health check results with appropriate log level
+func logHealthStatus(ctx context.Context, app *server.Server, health *server.Health) {
+	if health.Status == "Up" {
+		app.Logger.LogAttrs(ctx, slog.LevelInfo, "health check passed",
+			slog.String("overall_status", health.Status),
+			slog.String("database_status", health.DBStatus))
+	} else {
+		app.Logger.LogAttrs(ctx, slog.LevelError, "health check failed",
+			slog.String("overall_status", health.Status),
+			slog.String("database_status", health.DBStatus))
+	}
+}
+
+// sendHealthResponse writes the health status as a JSON response
+func sendHealthResponse(w http.ResponseWriter, app *server.Server, health *server.Health) {
+	data, err := json.Marshal(health)
+	if err != nil {
+		app.Logger.LogAttrs(context.Background(), slog.LevelError,
+			"failed to marshal health status", slog.String("error", err.Error()))
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(health.StatusCode)
+	if _, err := w.Write(data); err != nil {
+		app.Logger.LogAttrs(context.Background(), slog.LevelError,
+			"failed to write health response", slog.String("error", err.Error()))
+	}
+}
+
+// startServer begins listening for HTTP requests
+func startServer(ctx context.Context, app *server.Server, srvErr chan<- error) {
+	app.Logger.LogAttrs(ctx, slog.LevelInfo, "application is running",
+		slog.Group("server",
+			slog.String("name", app.Name),
+			slog.String("address", app.Addr),
+			slog.Bool("DB Connected", true),
+			slog.Group("timeouts (durations)",
+				slog.Duration("read", app.ReadTimeout),
+				slog.Duration("write", app.WriteTimeout),
+				slog.Duration("idle", app.IdleTimeout))))
+
+	app.Handler = app.Mux
+	srvErr <- app.ListenAndServe()
+}
+
+// gracefulShutdown performs a graceful shutdown of the server
+func gracefulShutdown(ctx context.Context, app *server.Server) error {
+	err := app.Shutdown(context.Background())
+	if err != nil {
+		app.Logger.LogAttrs(ctx, slog.LevelError, "error while shutting down",
+			slog.String("error", err.Error()))
+		return err
+	}
+
+	app.Logger.LogAttrs(ctx, slog.LevelInfo, "application is shut down",
+		slog.String("name", app.Name))
+	return nil
 }

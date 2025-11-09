@@ -22,8 +22,9 @@ type Configs struct {
 // Health represents the server's health check response.
 // It contains the status of the database and overall server health.
 type Health struct {
-	DBStatus string `json:"dbStatus"`
-	Status   string `json:"status"`
+	DBStatus   string `json:"dbStatus"`
+	Status     string `json:"status"`
+	StatusCode int
 }
 
 // Server represents the main HTTP server instance.

@@ -6,7 +6,6 @@ import (
 )
 
 const (
-	notFoundFormat = "%s not found"
 	invalidFormat  = "invalid %s"
 	requiredFormat = "%s is required"
 )
