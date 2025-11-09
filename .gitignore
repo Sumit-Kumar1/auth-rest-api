@@ -32,3 +32,4 @@ go.work.sum
 
 secrets/
 .env
+.DS_Store
