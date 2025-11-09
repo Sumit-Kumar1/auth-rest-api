@@ -49,12 +49,6 @@ func ErrBadRequest(err error) *CustomError {
 	return NewHTTPError(400, err.Error(), "")
 }
 
-// ErrNotFound creates an error for when an entity is not found.
-// It formats the error message using the notFoundFormat constant.
-func ErrNotFound(entity string) *CustomError {
-	return NewHTTPError(404, fmt.Sprintf(notFoundFormat, entity), "")
-}
-
 // constError is a type that implements the error interface.
 // It's used for creating constant error values for internal error use.
 type constError string

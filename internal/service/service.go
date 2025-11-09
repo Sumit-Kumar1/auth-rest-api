@@ -16,11 +16,9 @@ import (
 //
 //go:generate mockgen -source=service.go -destination=mock_interface.go -package=service
 type Storer interface {
-	// User operations
 	CreateUser(ctx context.Context, u *models.UserData) error
 	GetUserByEmail(ctx context.Context, email string) (*models.UserData, error)
 
-	// Token operations
 	IsTokenRevoked(ctx context.Context, tokenID string) (bool, error)
 	CreateToken(ctx context.Context, email string, td *models.TokenData) error
 	DeleteToken(ctx context.Context, email, accTokenID, refTokenID string) error

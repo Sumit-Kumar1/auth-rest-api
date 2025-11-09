@@ -24,12 +24,18 @@ func Test_getJWTSecrets(t *testing.T) {
 		wantAccessSecret  []byte
 		wantRefreshSecret []byte
 	}{
-		{name: "missing access secret", accEnv: "", wantAccessSecret: []byte("my_secret_key"),
-			wantRefreshSecret: []byte("my_refresh_secret_key")},
-		{name: "missing refresh secret", accEnv: "ABCD", wantAccessSecret: []byte("my_secret_key"),
-			wantRefreshSecret: []byte("my_refresh_secret_key")},
-		{name: "valid secrets", accEnv: "ABCD", refEnv: "XYZ", wantAccessSecret: []byte("ABCD"),
-			wantRefreshSecret: []byte("XYZ")},
+		{
+			name: "missing access secret", accEnv: "", wantAccessSecret: []byte("my_secret_key"),
+			wantRefreshSecret: []byte("my_refresh_secret_key"),
+		},
+		{
+			name: "missing refresh secret", accEnv: "ABCD", wantAccessSecret: []byte("my_secret_key"),
+			wantRefreshSecret: []byte("my_refresh_secret_key"),
+		},
+		{
+			name: "valid secrets", accEnv: "ABCD", refEnv: "XYZ", wantAccessSecret: []byte("ABCD"),
+			wantRefreshSecret: []byte("XYZ"),
+		},
 	}
 
 	for i, tt := range tests {
@@ -38,8 +44,8 @@ func Test_getJWTSecrets(t *testing.T) {
 			t.Setenv("REFRESH_SECRET", tt.refEnv)
 
 			gotAccessSecret, gotRefreshSecret := getJWTSecrets()
-			assert.Equalf(t, tt.wantAccessSecret, []byte(gotAccessSecret), testFailStr, i, tt.name)
-			assert.Equalf(t, tt.wantRefreshSecret, []byte(gotRefreshSecret), testFailStr, i, tt.name)
+			assert.Equalf(t, tt.wantAccessSecret, gotAccessSecret, testFailStr, i, tt.name)
+			assert.Equalf(t, tt.wantRefreshSecret, gotRefreshSecret, testFailStr, i, tt.name)
 		})
 	}
 }
@@ -79,12 +85,12 @@ func TestParseToken(t *testing.T) {
 	}
 
 	accessToken := jwt.NewWithClaims(jwt.SigningMethodHS256, accClaims)
-	valAccToken, err := accessToken.SignedString([]byte(accessKey))
+	valAccToken, err := accessToken.SignedString(accessKey)
 
 	assert.NoError(t, err)
 
 	refreshToken := jwt.NewWithClaims(jwt.SigningMethodHS256, refClaims)
-	valRefToken, err := refreshToken.SignedString([]byte(refKey))
+	valRefToken, err := refreshToken.SignedString(refKey)
 
 	assert.NoError(t, err)
 
