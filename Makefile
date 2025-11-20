@@ -18,7 +18,7 @@ test:
 	$(GOTEST) -v -race -cover ./...
 
 lint:
-	golangci-lint run
+	golangci-lint run ./...
 
 clean:
 	$(GOCLEAN)
@@ -38,7 +38,7 @@ docker-run:
 # Cross compilation
 build-linux:
 	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 $(GOBUILD) -o $(BINARY_UNIX) -v ./cmd/main.go
-	docker run --rm -it -v "$(GOPATH)":/go -w /go/src/github.com/yourusername/$(BINARY_NAME) golang:1.22 go build -o "$(BINARY_UNIX)" -v ./cmd/main.go
+	docker run --rm -it -v "$(GOPATH)":/go -w /go/src/github.com/sumit-kumar1/$(BINARY_NAME) golang:1.24 go build -o "$(BINARY_UNIX)" -v ./cmd/main.go
 
 # Development
 dev:
