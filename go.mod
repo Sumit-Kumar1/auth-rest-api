@@ -1,6 +1,6 @@
 module auth-rest-api
 
-go 1.23.3
+go 1.24.0
 
 require (
 	github.com/go-redis/redismock/v9 v9.2.0
@@ -10,7 +10,7 @@ require (
 	github.com/joho/godotenv v1.5.1
 	github.com/redis/go-redis/v9 v9.7.3
 	github.com/stretchr/testify v1.10.0
-	golang.org/x/crypto v0.35.0
+	golang.org/x/crypto v0.45.0
 )
 
 require (
