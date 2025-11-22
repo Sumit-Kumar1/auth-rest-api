@@ -10,6 +10,7 @@ RUN go mod download
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s -extldflags '-static'" -o main .
 
 FROM alpine:3.22 AS production
+RUN apk --no-cache add ca-certificates
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 WORKDIR /auth-rest-api
 

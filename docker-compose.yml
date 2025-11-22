@@ -1,55 +1,54 @@
+name: auth-app
 services:
-  auth-rest-api:
+  auth-api:
     build:
       context: .
       args:
         PORT: 9001
-    container_name: auth-rest-api
+    container_name: auth-api
     ports:
       - "${HTTP_PORT:-9001}:9001"
-    environment:
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - HTTP_PORT=9001
     env_file:
       - .env
+    environment:
+      - READ_TIMEOUT=5
+      - WRITE_TIMEOUT=5
+      - IDLE_TIMEOUT=10
+      - DB_HOST=auth-db
+      - DB_PORT=6379
+      - DB_NAME=0
+      - HTTP_HOST=0.0.0.0
+      - HTTP_PORT=9001
+      - LOG_LEVEL=DEBUG
     depends_on:
-      redis:
+      auth-db:
         condition: service_healthy
     networks:
-      - auth-network
+      - network
     healthcheck:
-      test:
-        [
-          "CMD",
-          "wget",
-          "--no-verbose",
-          "--tries=1",
-          "--spider",
-          "http://localhost:${HTTP_PORT}/health",
-        ]
+      test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:${HTTP_PORT}/health" ]
       interval: 30s
       timeout: 10s
       retries: 3
 
-  redis:
-    container_name: redis
+  auth-db:
+    container_name: auth-db
     image: redis:8-alpine
     ports:
       - "${REDIS_HOST_PORT:-6379}:6379"
     networks:
-      - auth-network
+      - network
     volumes:
       - redis-data:/data
     command: redis-server --appendonly yes
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: [ "CMD", "redis-cli", "ping" ]
       interval: 10s
       timeout: 3s
       retries: 5
 
 networks:
-  auth-network:
+  network:
     driver: bridge
 
 volumes:
