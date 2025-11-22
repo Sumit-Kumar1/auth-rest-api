@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"encoding/json"
+	"log"
 	"log/slog"
 	"net/http"
 
@@ -10,14 +11,20 @@ import (
 	"auth-rest-api/internal/server"
 	"auth-rest-api/internal/service"
 	"auth-rest-api/internal/store"
+
+	"github.com/joho/godotenv"
 )
 
 // Run initializes the server, sets up HTTP handlers, and starts the server.
 // It handles graceful shutdown when the application receives an interrupt signal.
 func Run(ctx context.Context) error {
-	app, err := server.NewFromEnv()
+	if err := godotenv.Load(".env"); err != nil {
+		log.Printf(".env file not found: %v", err)
+		log.Printf("continuing loading system / docker env variables")
+	}
+
+	app, err := server.NewServerBuilder().WithLogger().WithHostPort().WithTimeouts().Build()
 	if err != nil {
-		slog.LogAttrs(ctx, slog.LevelError, "failed to create server", slog.Any("error", err))
 		return err
 	}
 
@@ -163,8 +170,7 @@ func sendHealthResponse(w http.ResponseWriter, app *server.Server, health *serve
 // startServer begins listening for HTTP requests
 func startServer(ctx context.Context, app *server.Server, srvErr chan<- error) {
 	app.Logger.LogAttrs(ctx, slog.LevelInfo, "application is running",
-		slog.Group("server",
-			slog.String("name", app.Name),
+		slog.Group("auth-rest-api server",
 			slog.String("address", app.Addr),
 			slog.Bool("DB Connected", true),
 			slog.Group("timeouts (durations)",
@@ -185,7 +191,6 @@ func gracefulShutdown(ctx context.Context, app *server.Server) error {
 		return err
 	}
 
-	app.Logger.LogAttrs(ctx, slog.LevelInfo, "application is shut down",
-		slog.String("name", app.Name))
+	app.Logger.LogAttrs(ctx, slog.LevelInfo, "application is shut down")
 	return nil
 }
