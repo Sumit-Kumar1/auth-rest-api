@@ -136,14 +136,14 @@ paths:
         - User
       summary: enable user to login and generate tokens
       security:
-        - bearerAuth: [ ]
+        - bearerAuth: []
       parameters:
         - in: header
           name: Authorization
           required: true
           schema:
             type: string
-            example: "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6InN1bWl0QGt1bWFyLmNvbSIsImNsYWltSUQiOiIxNDExNzcyYi1jOTU1LTQ1MzUtOTNlMi1hYmIyNGVkM2I5NjUiLCJpc3MiOiJzdW1pdCBrdW1hciIsInN1YiI6InN1bWl0QGt1bWFyLmNvbSIsImV4cCI6MTczMjY5NTcwNSwibmJmIjoxNzMyNjk0ODA1LCJpYXQiOjE3MzI2OTQ4MDUsImp0aSI6IjEifQ.Jm-_fvwk3tIWZHsm9faOzSDVlRdCOkBTsUCmpZ_HIgE"
+            example: "Bearer <JWT_token>"
       requestBody:
         required: true
         content:
@@ -188,14 +188,14 @@ paths:
         - User
       summary: enable user to login and generate tokens
       security:
-        - bearerAuth: [ ]
+        - bearerAuth: []
       parameters:
         - in: header
           name: Authorization
           required: true
           schema:
             type: string
-            example: "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6InN1bWl0QGt1bWFyLmNvbSIsImNsYWltSUQiOiIxNDExNzcyYi1jOTU1LTQ1MzUtOTNlMi1hYmIyNGVkM2I5NjUiLCJpc3MiOiJzdW1pdCBrdW1hciIsInN1YiI6InN1bWl0QGt1bWFyLmNvbSIsImV4cCI6MTczMjY5NTcwNSwibmJmIjoxNzMyNjk0ODA1LCJpYXQiOjE3MzI2OTQ4MDUsImp0aSI6IjEifQ.Jm-_fvwk3tIWZHsm9faOzSDVlRdCOkBTsUCmpZ_HIgE"
+            example: "Bearer <JWT_token>"
       responses:
         204:
           description: token revoked successfully
@@ -223,7 +223,6 @@ paths:
                   message:
                     type: string
                     example: "Failed to revoke token"
-                
 
 components:
   schemas:
@@ -274,19 +273,19 @@ components:
         refreshToken:
           type: string
           description: "refresh token"
-          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6InN1bWl0QGt1bWFyLmNvbSIsImNsYWltSUQiOiJkYTBmYmUyYS03NmRkLTQwMjAtYmZjYS1jOThlYzY4NDM2YjMiLCJzdWIiOiJzdW1pdEBrdW1hci5jb20iLCJleHAiOjE3MzI3ODEyMDUsImlhdCI6MTczMjY5NDgwNX0.9es_flCknHGZsyw5NsUajYftrLtwOXT1jO_U7U7RXQQ"
+          example: "<some_JWT_token>"
 
     refreshTokenResp:
       type: object
       properties:
         accessToken:
           type: string
-          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6InN1bWl0QGt1bWFyLmNvbSIsImNsYWltSUQiOiIxNDExNzcyYi1jOTU1LTQ1MzUtOTNlMi1hYmIyNGVkM2I5NjUiLCJpc3MiOiJzdW1pdCBrdW1hciIsInN1YiI6InN1bWl0QGt1bWFyLmNvbSIsImV4cCI6MTczMjY5NTcwNSwibmJmIjoxNzMyNjk0ODA1LCJpYXQiOjE3MzI2OTQ4MDUsImp0aSI6IjEifQ.Jm-_fvwk3tIWZHsm9faOzSDVlRdCOkBTsUCmpZ_HIgE"
+          example: "<some_JWT_token>"
         refreshToken:
           type: string
-          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6InN1bWl0QGt1bWFyLmNvbSIsImNsYWltSUQiOiJkYTBmYmUyYS03NmRkLTQwMjAtYmZjYS1jOThlYzY4NDM2YjMiLCJzdWIiOiJzdW1pdEBrdW1hci5jb20iLCJleHAiOjE3MzI3ODEyMDUsImlhdCI6MTczMjY5NDgwNX0.9es_flCknHGZsyw5NsUajYftrLtwOXT1jO_U7U7RXQQ"
+          example: "<some_JWT_token>"
 
-  securitySchemes: 
+  securitySchemes:
     bearerAuth:
       type: http
       scheme: bearer
