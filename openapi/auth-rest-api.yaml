@@ -249,10 +249,10 @@ components:
           example: "sumit@kumar.com"
         accessToken:
           type: string
-          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6InN1bWl0QGt1bWFyLmNvbSIsImNsYWltSUQiOiIxNDExNzcyYi1jOTU1LTQ1MzUtOTNlMi1hYmIyNGVkM2I5NjUiLCJpc3MiOiJzdW1pdCBrdW1hciIsInN1YiI6InN1bWl0QGt1bWFyLmNvbSIsImV4cCI6MTczMjY5NTcwNSwibmJmIjoxNzMyNjk0ODA1LCJpYXQiOjE3MzI2OTQ4MDUsImp0aSI6IjEifQ.Jm-_fvwk3tIWZHsm9faOzSDVlRdCOkBTsUCmpZ_HIgE"
+          example: "<some_JWT_token>"
         refreshToken:
           type: string
-          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6InN1bWl0QGt1bWFyLmNvbSIsImNsYWltSUQiOiJkYTBmYmUyYS03NmRkLTQwMjAtYmZjYS1jOThlYzY4NDM2YjMiLCJzdWIiOiJzdW1pdEBrdW1hci5jb20iLCJleHAiOjE3MzI3ODEyMDUsImlhdCI6MTczMjY5NDgwNX0.9es_flCknHGZsyw5NsUajYftrLtwOXT1jO_U7U7RXQQ"
+          example: "<some_JWT_token>"
 
     healthUp:
       type: object
