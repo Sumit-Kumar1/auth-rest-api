@@ -1,62 +1,90 @@
 package models
 
 import (
+	"errors"
 	"fmt"
-	"strings"
 )
 
 const (
-	notFoundFormat = "%s not found"
 	invalidFormat  = "invalid %s"
 	requiredFormat = "%s is required"
 )
 
 var (
-	ErrDBNotConnected    = constError("database not connected")
-	ErrTokenRevoked      = constError("token is revoked")
-	ErrUserAlreadyExists = constError("user already exists")
-	ErrPsswdNotMatch     = constError("password does not match")
+	ErrDBNotConnected    = NewConstError("database not connected")
+	ErrTokenRevoked      = NewConstError("token is revoked")
+	ErrUserAlreadyExists = NewConstError("user already exists")
+	ErrPasswordMismatch  = NewConstError("password does not match")
+	ErrUserNotFound      = NewConstError("user does not exist")
 )
 
-// CustomError error wrapper for sending in http response
+// CustomError represents an error that can be sent in HTTP responses.
+// It includes an HTTP status code and an error message.
 type CustomError struct {
 	Code    int    `json:"code"`
 	Message string `json:"message"`
+	Details string `json:"details,omitempty"`
 }
 
-type constError string
-
-func NewConstError(message string) constError {
-	return constError(message)
+// Error implements the error interface for CustomError.
+// It returns the error message.
+func (e *CustomError) Error() string {
+	return e.Message
 }
 
-func (err constError) Error() string {
+// NewHTTPError created a custom error based on code, msg and detail of error,
+// use only at handler layer
+func NewHTTPError(code int, msg, details string) *CustomError {
+	return &CustomError{
+		Code:    code,
+		Message: msg,
+		Details: details,
+	}
+}
+
+// ErrBadRequest creates an error for bad request scenarios.
+// It wraps the provided error in a CustomError with a 400 status code.
+func ErrBadRequest(err error) *CustomError {
+	return NewHTTPError(400, err.Error(), "")
+}
+
+// ConstError is a type that implements the error interface.
+// It's used for creating constant error values for internal error use.
+type ConstError string
+
+// NewConstError creates a new constant error with the given message.
+// It returns a constError that can be used as a constant error value.
+func NewConstError(message string) ConstError {
+	return ConstError(message)
+}
+
+// Error implements the error interface for constError.
+// It returns the string representation of the error.
+func (err ConstError) Error() string {
 	return string(err)
 }
 
-func (err constError) Is(target error) bool {
-	if targetErr, ok := target.(constError); ok {
-		return string(err) == string(targetErr)
+// Is implements error comparison for constError.
+// It allows checking if an error matches a specific constError value.
+func (err ConstError) Is(target error) bool {
+	var t ConstError
+
+	ok := errors.As(target, &t)
+	if !ok {
+		return false
 	}
 
-	ts := target.Error()
-	es := string(err)
-
-	return ts == es || strings.HasPrefix(ts, es+": ")
+	return err == t
 }
 
-func ErrNotFound(entity string) error {
-	return NewConstError(fmt.Sprintf(notFoundFormat, entity))
-}
-
-func ErrBadRequest(err error) error {
-	return NewConstError(err.Error())
-}
-
+// ErrInvalid creates an error for invalid entity scenarios.
+// It formats the error message using the invalidFormat constant.
 func ErrInvalid(entity string) error {
 	return NewConstError(fmt.Sprintf(invalidFormat, entity))
 }
 
+// ErrRequired creates an error for required field scenarios.
+// It formats the error message using the requiredFormat constant.
 func ErrRequired(entity string) error {
 	return NewConstError(fmt.Sprintf(requiredFormat, entity))
 }

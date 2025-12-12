@@ -8,11 +8,11 @@
 ### Method 1
 
 1. Clone the repository
-2. install golang preferable v1.23.3
+2. install golang preferable v1.24
 3. set envs in .env file  according to your or use existing .env
 4. run the redis-server on your local machine at `localhost:6379`
 5. run the application by command `go run cmd/main.go`
-6. you can see logs and run the curl commands in the terminal or from postman !!
+6. you can see logs and run the curl commands in the terminal or from any api testing tool !!
 
 ### Method 2
 
@@ -22,6 +22,33 @@
 4. run the command `docker-compose up` and wait till it completes
 5. you can try the app at `localhost:9001` if you don't change any env
 
+## Development
+
+This project includes a Makefile for common development tasks:
+
+```bash
+# Build the application
+make build
+
+# Run tests
+make test
+
+# Run linter
+make lint
+
+# Run the application
+make run
+
+# Build Docker image
+make docker-build
+
+# Run Docker container
+make docker-run
+
+# Development with hot reload
+make dev
+```
+
 ## Exposed Endpoints
 
 1. **POST /signup**: Register a new user with email & password
@@ -29,7 +56,11 @@
 3. **POST /refresh**: Refresh token before expiry of access token, *needs access-token in authentication header & refreshToken as json-body*
 4. **POST /revoke**: Revoke the access token, *needs access-token in authentication header*
 
-NOTE: **password** should be 8 character long, **email** should be in format `user@example.com` must have`@` and `.` in it
+NOTE:
+-  **password** should be 8 character long, **email** should be in format `user@example.com` must have`@` and `.` in it
+- Token expiry -> `access-token: 15m`, `refresh-token: 24h`
+- You won't be able to get refresh token if your access token is revoked or expired, signin again to get new refresh and access tokens
+
 
 ## Curls for testing
 
@@ -47,3 +78,82 @@ NOTE: **password** should be 8 character long, **email** should be in format `us
 
 - Revoke existing token: `curl --location --request POST 'http://localhost:9001/revoke' --header 'Authorization: *****'`
   - **NOTE**: *replace `*****` with actual access token value (it is a bearer token)*
+
+
+## Low Level Details
+
+### Handling User data (Redis Data structure):
+- for each user store: `user ID, Email, Password (hashed)`
+- schema:
+   ```
+      Key : email:<email>
+      Value: <user_id>
+
+
+      Key : user:<user_id>
+      Fields:
+            - id: <user_id>
+            - email: <email>
+            - password: <password>
+   ```
+
+### Handling JWT tokens
+- for each user sign-in request, it creates two token : `access_token, refresh_token`
+- access token key linking token ID to user email, with expiration TTL
+- refresh token key linking token ID to user email, with expiration TTL
+- Sets tracking all active token IDs per user for access and refresh tokens
+- schema:
+```
+   Key: access_token:<access_token_id> 
+   Value: <email>
+
+   Key: refresh_token:<refresh_token_id>
+   Value: <email>
+
+   Key : user_access_tokens:<email>
+   Value: SET {access_token_id1, .....}
+
+   Key: user_refresh_tokens:<email>
+   Value: SET {refresh_token_id1, .....}
+```
+#### Operational Workflow
+
+- Issuing Tokens:
+
+   - Use SET to store access_token:{tokenId} and refresh_token:{tokenId} with user email as value, applying expiration TTL based on token lifetime.
+   - Add token IDs to corresponding user Sets using SADD.
+
+- Validating Tokens:
+
+   - Lookup token using GET access_token:{tokenId} or GET refresh_token:{tokenId} to verify existence and retrieve user.
+
+- Revoking Tokens:
+
+   - Delete token keys using DEL.
+   - Remove token IDs from user Sets using SREM.
+   - To revoke all tokens of a user, iterate their Sets and delete each token key, then clear the Set.
+
+
+## CI/CD Pipeline
+
+This project uses GitHub Actions for continuous integration and deployment:
+
+1. **Build and Test**: On every push and pull request, the pipeline:
+   - Sets up Go environment
+   - Installs dependencies
+   - Runs linters (golangci-lint)
+   - Runs tests with race detection and coverage reporting
+   - Uploads coverage to Codecov
+
+2. **Docker Build**: On pushes to the main branch, the pipeline:
+   - Builds a Docker image
+   - Pushes the image to Docker Hub
+
+To use the CI/CD pipeline:
+1. Set up the following secrets in your GitHub repository:
+   - `DOCKER_USERNAME`: Your Docker Hub username
+   - `DOCKER_PASSWORD`: Your Docker Hub password/token
+
+2. The pipeline will automatically run on:
+   - Pull requests to the main branch
+   - Pushes to the main branch

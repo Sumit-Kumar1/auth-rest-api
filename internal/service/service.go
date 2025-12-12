@@ -2,29 +2,36 @@ package service
 
 import (
 	"context"
-	"errors"
 	"log/slog"
 
 	"auth-rest-api/internal/models"
 	"auth-rest-api/internal/server"
 
+	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 )
 
+// Storer defines the interface for data storage operations.
+// It provides methods for user and token management.
+//
+//go:generate mockgen -source=service.go -destination=mock_interface.go -package=service
 type Storer interface {
-	// User
 	CreateUser(ctx context.Context, u *models.UserData) error
 	GetUserByEmail(ctx context.Context, email string) (*models.UserData, error)
-	// Token
+
 	IsTokenRevoked(ctx context.Context, tokenID string) (bool, error)
 	CreateToken(ctx context.Context, email string, td *models.TokenData) error
-	DeleteToken(ctx context.Context, tokenID ...string) error
+	DeleteToken(ctx context.Context, email, accTokenID, refTokenID string) error
 }
 
+// Service represents the core business logic layer.
+// It handles user authentication and token management operations.
 type Service struct {
 	Store Storer
 }
 
+// New creates a new instance of the Service with the provided storage implementation.
+// It initializes the service with the required dependencies.
 func New(s Storer) *Service {
 	return &Service{Store: s}
 }
@@ -33,7 +40,7 @@ func (s *Service) SignUp(ctx context.Context, user *models.UserReq) error {
 	logger := ctx.Value(server.Logger).(*slog.Logger)
 
 	if user == nil {
-		logger.LogAttrs(ctx, slog.LevelError, "empty user struct provided")
+		logger.LogAttrs(ctx, slog.LevelError, "signup-service: empty user struct provided")
 		return models.ErrBadRequest(models.ErrInvalid("user input"))
 	}
 
@@ -42,7 +49,7 @@ func (s *Service) SignUp(ctx context.Context, user *models.UserReq) error {
 	}
 
 	exUser, err := s.Store.GetUserByEmail(ctx, user.Email)
-	if err != nil && !errors.Is(models.ErrNotFound("user"), err) {
+	if err != nil && !models.ErrUserNotFound.Is(err) {
 		return err
 	}
 
@@ -56,6 +63,7 @@ func (s *Service) SignUp(ctx context.Context, user *models.UserReq) error {
 	}
 
 	ud := models.UserData{
+		ID:       uuid.NewString(),
 		Email:    user.Email,
 		Password: hash,
 	}
@@ -67,95 +75,105 @@ func (s *Service) SignUp(ctx context.Context, user *models.UserReq) error {
 	return nil
 }
 
-func (s *Service) SignIn(ctx context.Context, user *models.UserReq) (access, refresh string, err error) {
+func (s *Service) SignIn(ctx context.Context, user *models.UserReq) (*models.TokenResponse, error) {
 	logger := ctx.Value(server.Logger).(*slog.Logger)
 
 	if user == nil {
 		logger.LogAttrs(ctx, slog.LevelError, "empty user struct provided")
-		return "", "", models.ErrBadRequest(models.ErrInvalid("user"))
+		return nil, models.ErrBadRequest(models.ErrInvalid("user"))
 	}
 
 	if valErr := user.Validate(); valErr != nil {
-		return "", "", models.ErrBadRequest(valErr)
+		return nil, models.ErrBadRequest(valErr)
 	}
 
 	exUser, err := s.Store.GetUserByEmail(ctx, user.Email)
 	if err != nil {
-		return "", "", err
+		return nil, err
 	}
 
 	if err = bcrypt.CompareHashAndPassword(exUser.Password, []byte(user.Password)); err != nil {
 		logger.LogAttrs(ctx, slog.LevelError, "wrong password")
-		return "", "", models.ErrPsswdNotMatch
+		return nil, models.ErrPasswordMismatch
 	}
 
-	tokenData, err := GenerateToken(user.Email)
+	tokenData, err := GenerateToken(exUser.ID, exUser.Email)
 	if err != nil {
-		return "", "", err
+		return nil, err
 	}
 
-	if err := s.Store.CreateToken(ctx, user.Email, tokenData); err != nil {
-		return "", "", err
+	if err := s.Store.CreateToken(ctx, exUser.Email, tokenData); err != nil {
+		return nil, err
 	}
 
-	return tokenData.AccessToken, tokenData.RefreshToken, nil
+	return &models.TokenResponse{
+		AccessToken:  tokenData.AccessToken,
+		RefreshToken: tokenData.RefreshToken,
+	}, nil
 }
 
-func (s *Service) RefreshToken(ctx context.Context, accessToken, refreshToken string) (access, refresh string, err error) {
-	logger := ctx.Value(server.Logger).(*slog.Logger)
-
-	accClaims, err := ParseToken(accessToken, "access")
+func (s *Service) RefreshToken(ctx context.Context, accessToken, refreshToken string) (*models.TokenResponse, error) {
+	accessClaim, refreshClaim, err := s.tokenParsing(accessToken, refreshToken)
 	if err != nil {
-		logger.LogAttrs(ctx, slog.LevelError, "invalid access token", slog.String("token", accessToken), slog.String("error", err.Error()))
-		return "", "", err
+		return nil, err
 	}
 
-	refClaims, err := ParseToken(refreshToken, "refresh")
+	// check if access token is revoked
+	isRevoked, err := s.Store.IsTokenRevoked(ctx, accessClaim.ClaimUID)
 	if err != nil {
-		logger.LogAttrs(ctx, slog.LevelError, "invalid refresh token", slog.String("token", refreshToken), slog.String("error", err.Error()))
-		return "", "", err
-	}
-
-	// check if token is revoked
-	isRevoked, err := s.Store.IsTokenRevoked(ctx, accClaims.ClaimUID)
-	if err != nil {
-		return "", "", err
+		return nil, err
 	}
 
 	if isRevoked {
-		return "", "", models.ErrTokenRevoked
+		return nil, models.ErrTokenRevoked
 	}
 
 	// Deleting old active tokens
-	if delErr := s.Store.DeleteToken(ctx, accClaims.ClaimUID, refClaims.ClaimUID); delErr != nil {
-		return "", "", delErr
+	if delErr := s.Store.DeleteToken(ctx, accessClaim.Email, accessClaim.ClaimUID, refreshClaim.ClaimUID); delErr != nil {
+		return nil, delErr
 	}
 
-	td, err := GenerateToken(accClaims.Email)
+	td, err := GenerateToken(accessClaim.Subject, accessClaim.Email)
 	if err != nil {
-		return "", "", err
+		return nil, err
 	}
 
 	// store the newly generated tokens UIDs
-	if err := s.Store.CreateToken(ctx, accClaims.Email, td); err != nil {
-		return "", "", err
+	if err := s.Store.CreateToken(ctx, accessClaim.Email, td); err != nil {
+		return nil, err
 	}
 
-	return td.AccessToken, td.RefreshToken, nil
+	return &models.TokenResponse{AccessToken: td.AccessToken,
+		RefreshToken: td.RefreshToken}, nil
 }
 
+// RevokeToken revokes the provided token, deletes stored token too
 func (s *Service) RevokeToken(ctx context.Context, token string) error {
 	logger := ctx.Value(server.Logger).(*slog.Logger)
 
 	accClaims, err := ParseToken(token, "access")
 	if err != nil {
-		logger.LogAttrs(ctx, slog.LevelError, "invalid access token", slog.String("token", token), slog.String("error", err.Error()))
+		logger.LogAttrs(ctx, slog.LevelError, "invalid access token", slog.String("error", err.Error()))
 		return err
 	}
 
-	if delErr := s.Store.DeleteToken(ctx, accClaims.ClaimUID); delErr != nil {
+	if delErr := s.Store.DeleteToken(ctx, accClaims.Email, accClaims.ClaimUID, ""); delErr != nil {
 		return delErr
 	}
 
 	return nil
+}
+
+func (s *Service) tokenParsing(accToken, refToken string) (access, refresh *Claims, err error) {
+	access, err = ParseToken(accToken, "access")
+	if err != nil {
+		return nil, nil, err
+	}
+
+	refresh, err = ParseToken(refToken, "refresh")
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return
 }

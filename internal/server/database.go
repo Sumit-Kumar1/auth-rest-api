@@ -1,10 +1,17 @@
 package server
 
 import (
-	"auth-rest-api/internal/models"
 	"context"
+	"errors"
+	"fmt"
 	"log/slog"
+	"net"
 	"os"
+	"strconv"
+	"sync"
+	"time"
+
+	"auth-rest-api/internal/models"
 
 	"github.com/redis/go-redis/v9"
 )
@@ -13,31 +20,44 @@ type Database struct {
 	Client *redis.Client
 }
 
+//nolint:gochecknoglobals // need these globals for singleton pattern
+var (
+	dbInstance *Database
+	dbOnce     sync.Once
+)
+
 func newDB(logger *slog.Logger) (*Database, error) {
-	addr := os.Getenv("DB_ADDRESS")
-	if addr == "" {
-		addr = "localhost:6379"
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	host := getEnvOrDefault("DB_HOST", "localhost")
+	port := getEnvOrDefault("DB_PORT", "6379")
+	dbIdx, err := strconv.Atoi(getEnvOrDefault("DB_NAME", "0"))
+	if err != nil {
+		return nil, fmt.Errorf("invalid DB_NAME: %w", err)
 	}
 
-	psswd := os.Getenv("DB_PASSWORD")
-	name := getEnvAsInt("DB_NAME", 0)
+	addr := net.JoinHostPort(host, port)
+	logger.DebugContext(ctx, "redis dial",
+		slog.String("addr", addr),
+		slog.Int("db", dbIdx))
 
-	rClient := redis.NewClient(&redis.Options{
+	rdb := redis.NewClient(&redis.Options{
 		Addr:     addr,
-		Password: psswd,
-		DB:       name,
+		Password: os.Getenv("DB_PASSWORD"),
+		DB:       dbIdx,
 	})
 
-	if rClient == nil {
-		return nil, models.ErrDBNotConnected
+	if err := rdb.Ping(ctx).Err(); err != nil {
+		return nil, errors.Join(models.ErrDBNotConnected, err)
 	}
 
-	rcmd := rClient.Ping(context.Background())
-	if err := rcmd.Err(); err != nil {
-		return nil, err
-	}
+	logger.InfoContext(ctx, "connected to redis", slog.String("addr", addr))
+	return &Database{Client: rdb}, nil
+}
 
-	logger.LogAttrs(context.Background(), slog.LevelInfo, "Connected to Redis success!")
-
-	return &Database{Client: rClient}, nil
+func getDatabase(logger *slog.Logger) (*Database, error) {
+	var initErr error
+	dbOnce.Do(func() { dbInstance, initErr = newDB(logger) })
+	return dbInstance, initErr
 }

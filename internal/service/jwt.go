@@ -2,7 +2,6 @@ package service
 
 import (
 	"encoding/json"
-	"errors"
 	"os"
 	"time"
 
@@ -12,39 +11,50 @@ import (
 	"github.com/google/uuid"
 )
 
+// Claims represents the custom claims for JWT tokens.
+// It extends the standard JWT claims with email and claim ID fields.
 type Claims struct {
 	Email    string `json:"email"`
 	ClaimUID string `json:"claimID"`
+	// registeredClaim's subject is userID from db
 	jwt.RegisteredClaims
 }
 
-// GenerateToken generates a JWT token with 15 minutes of expiry
-func GenerateToken(email string) (*models.TokenData, error) {
+// GenerateToken generates a new JWT token pair (access and refresh tokens).
+// It creates tokens with appropriate expiration times and unique IDs.
+// The access token expires in 15 minutes, while the refresh token lasts longer.
+// Returns the token data or an error if token generation fails.
+func GenerateToken(idSub, email string) (*models.TokenData, error) {
 	accID := uuid.NewString()
 	refID := uuid.NewString()
+	jti := uuid.NewString()
+
 	claims := Claims{
 		Email:    email,
 		ClaimUID: accID,
 		RegisteredClaims: jwt.RegisteredClaims{
+			Audience:  jwt.ClaimStrings{"todoapp"},
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Minute * 15)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 			NotBefore: jwt.NewNumericDate(time.Now()),
-			Issuer:    "sumit kumar",
-			Subject:   email,
-			ID:        "1",
+			Issuer:    "auth-rest-api",
+			Subject:   idSub,
+			ID:        jti,
 		},
 	}
 
 	refClaims := jwt.RegisteredClaims{
-		ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour * 24)),
+		Audience:  jwt.ClaimStrings{"todoapp"},
+		ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Minute * 4)),
 		IssuedAt:  jwt.NewNumericDate(time.Now()),
-		Subject:   email,
+		Issuer:    "auth-rest-api",
+		Subject:   idSub,
+		ID:        jti,
 	}
 
 	accessKey, refKey := getJWTSecrets()
 
 	accessToken := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-
 	refToken := jwt.NewWithClaims(jwt.SigningMethodHS256, Claims{
 		Email:            email,
 		ClaimUID:         refID,
@@ -73,6 +83,9 @@ func GenerateToken(email string) (*models.TokenData, error) {
 	return &tkData, nil
 }
 
+// ParseToken validates and parses a JWT token.
+// It verifies the token signature and expiration time.
+// Returns the token claims or an error if the token is invalid.
 func ParseToken(tokenString, tokenType string) (*Claims, error) {
 	var (
 		token *jwt.Token
@@ -85,13 +98,13 @@ func ParseToken(tokenString, tokenType string) (*Claims, error) {
 	case "access":
 		token, err = jwt.ParseWithClaims(tokenString, &Claims{}, func(_ *jwt.Token) (any, error) {
 			return accSecret, nil
-		})
+		}, jwt.WithExpirationRequired(), jwt.WithStrictDecoding())
 	case "refresh":
 		token, err = jwt.ParseWithClaims(tokenString, &Claims{}, func(_ *jwt.Token) (any, error) {
 			return refSecret, nil
-		})
+		}, jwt.WithExpirationRequired(), jwt.WithStrictDecoding())
 	default:
-		return nil, errors.New("invalid token type")
+		return nil, models.ErrInvalid("token type")
 	}
 
 	if err != nil {
@@ -109,6 +122,9 @@ func ParseToken(tokenString, tokenType string) (*Claims, error) {
 	return nil, err
 }
 
+// getJWTSecrets retrieves the JWT signing secrets from environment variables.
+// It returns the access and refresh token secrets.
+// If environment variables are not set, it returns default values.
 func getJWTSecrets() (accessSecret, refreshSecret []byte) {
 	access := os.Getenv("ACCESS_SECRET")
 	if access == "" {
