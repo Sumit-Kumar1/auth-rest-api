@@ -48,26 +48,26 @@ func ErrBadRequest(err error) *CustomError {
 	return NewHTTPError(400, err.Error(), "")
 }
 
-// constError is a type that implements the error interface.
+// ConstError is a type that implements the error interface.
 // It's used for creating constant error values for internal error use.
-type constError string
+type ConstError string
 
 // NewConstError creates a new constant error with the given message.
 // It returns a constError that can be used as a constant error value.
-func NewConstError(message string) constError {
-	return constError(message)
+func NewConstError(message string) ConstError {
+	return ConstError(message)
 }
 
 // Error implements the error interface for constError.
 // It returns the string representation of the error.
-func (err constError) Error() string {
+func (err ConstError) Error() string {
 	return string(err)
 }
 
 // Is implements error comparison for constError.
 // It allows checking if an error matches a specific constError value.
-func (err constError) Is(target error) bool {
-	var t constError
+func (err ConstError) Is(target error) bool {
+	var t ConstError
 
 	ok := errors.As(target, &t)
 	if !ok {

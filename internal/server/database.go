@@ -20,6 +20,7 @@ type Database struct {
 	Client *redis.Client
 }
 
+//nolint:gochecknoglobals // need these globals for singleton pattern
 var (
 	dbInstance *Database
 	dbOnce     sync.Once

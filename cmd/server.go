@@ -15,6 +15,11 @@ import (
 	"github.com/joho/godotenv"
 )
 
+const (
+	up   = "UP"
+	down = "DOWN"
+)
+
 // Run initializes the server, sets up HTTP handlers, and starts the server.
 // It handles graceful shutdown when the application receives an interrupt signal.
 func Run(ctx context.Context) error {
@@ -92,14 +97,13 @@ func healthHandler(app *server.Server) http.HandlerFunc {
 // checkSystemHealth performs all health checks and returns the overall status
 func checkSystemHealth(ctx context.Context, app *server.Server) *server.Health {
 	dbHealthy := checkDatabaseHealth(ctx, app)
-
-	status := "Up"
-	dbStatus := "Up"
+	status := up
+	dbStatus := up
 	httpStatus := http.StatusOK
 
 	if !dbHealthy {
-		status = "Down"
-		dbStatus = "Down"
+		status = down
+		dbStatus = down
 		httpStatus = http.StatusServiceUnavailable
 	}
 
@@ -138,7 +142,7 @@ func checkDatabaseHealth(ctx context.Context, app *server.Server) bool {
 
 // logHealthStatus logs the health check results with appropriate log level
 func logHealthStatus(ctx context.Context, app *server.Server, health *server.Health) {
-	if health.Status == "Up" {
+	if health.Status == up {
 		app.Logger.LogAttrs(ctx, slog.LevelInfo, "health check passed",
 			slog.String("overall_status", health.Status),
 			slog.String("database_status", health.DBStatus))
@@ -184,13 +188,29 @@ func startServer(ctx context.Context, app *server.Server, srvErr chan<- error) {
 
 // gracefulShutdown performs a graceful shutdown of the server
 func gracefulShutdown(ctx context.Context, app *server.Server) error {
-	err := app.Shutdown(context.Background())
-	if err != nil {
+	var err error
+	if err = app.Shutdown(context.Background()); err != nil {
 		app.Logger.LogAttrs(ctx, slog.LevelError, "error while shutting down",
 			slog.String("error", err.Error()))
 		return err
 	}
 
-	app.Logger.LogAttrs(ctx, slog.LevelInfo, "application is shut down")
+	defer app.Logger.Info("application is shut down")
+
+	//close db
+	if app.DB == nil {
+		app.Logger.Warn("closing app with nil DB")
+		return nil
+	}
+
+	if app.DB.Client == nil {
+		app.Logger.Warn("closing app with nil DB client")
+		return nil
+	}
+
+	if err = app.DB.Client.Close(); err != nil {
+		app.Logger.Error("closing DB client", slog.String("error", err.Error()))
+	}
+
 	return nil
 }
