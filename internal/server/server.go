@@ -26,24 +26,24 @@ type Server struct {
 	*http.Server
 }
 
-type ServerBuilder struct {
+type Builder struct {
 	server *Server
 }
 
 type Opts func(s *Server)
 
-func NewServerBuilder() *ServerBuilder {
+func NewServerBuilder() *Builder {
 	s := defaultServer()
 
 	return s
 }
 
-func (sb *ServerBuilder) WithLogger() *ServerBuilder {
+func (sb *Builder) WithLogger() *Builder {
 	sb.server.Logger = newLogger()
 	return sb
 }
 
-func (sb *ServerBuilder) WithTimeouts() *ServerBuilder {
+func (sb *Builder) WithTimeouts() *Builder {
 	read := getEnvAsInt("READ_TIMEOUT", 10)   // Default to 10 second
 	write := getEnvAsInt("WRITE_TIMEOUT", 20) // Default to 20 second
 	idle := getEnvAsInt("IDLE_TIMEOUT", 30)   // Default to 30 second
@@ -55,7 +55,7 @@ func (sb *ServerBuilder) WithTimeouts() *ServerBuilder {
 	return sb
 }
 
-func (sb *ServerBuilder) WithHostPort() *ServerBuilder {
+func (sb *Builder) WithHostPort() *Builder {
 	port := os.Getenv("HTTP_PORT")
 	host := os.Getenv("HTTP_HOST")
 
@@ -63,7 +63,7 @@ func (sb *ServerBuilder) WithHostPort() *ServerBuilder {
 	return sb
 }
 
-func (sb *ServerBuilder) Build() (*Server, error) {
+func (sb *Builder) Build() (*Server, error) {
 	db, err := getDatabase(sb.server.Logger)
 	if err != nil {
 		return nil, err
@@ -74,8 +74,8 @@ func (sb *ServerBuilder) Build() (*Server, error) {
 	return sb.server, nil
 }
 
-func defaultServer() *ServerBuilder {
-	return &ServerBuilder{
+func defaultServer() *Builder {
+	return &Builder{
 		server: &Server{
 			Mux: http.NewServeMux(),
 			Server: &http.Server{
