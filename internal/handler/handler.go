@@ -12,6 +12,8 @@ import (
 
 	"auth-rest-api/internal/models"
 	"auth-rest-api/internal/server"
+
+	"github.com/google/uuid"
 )
 
 // Servicer defines the interface for service layer operations.
@@ -23,6 +25,7 @@ type Servicer interface {
 	SignIn(ctx context.Context, user *models.UserReq) (*models.TokenResponse, error)
 	RefreshToken(ctx context.Context, accToken, refToken string) (*models.TokenResponse, error)
 	RevokeToken(ctx context.Context, accToken string) error
+	ValidateTokens(ctx context.Context, token string) (*uuid.UUID, error)
 }
 
 // Handler represents the HTTP request handler layer.
@@ -35,6 +38,31 @@ type Handler struct {
 // It initializes the handler with the required dependencies.
 func New(s Servicer) *Handler {
 	return &Handler{Service: s}
+}
+
+func (h *Handler) Validate(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	logger := ctx.Value(server.Logger).(*slog.Logger)
+
+	authHeader := r.Header.Get("Authorization")
+	if strings.TrimSpace(authHeader) == "" {
+		logger.LogAttrs(ctx, slog.LevelError, "Missing Authorization header")
+		respondWithError(w, http.StatusUnauthorized, "Missing Authorization header")
+
+		return
+	}
+
+	token := strings.TrimPrefix(authHeader, "Bearer ")
+
+	userID, err := h.Service.ValidateTokens(ctx, token)
+	if err != nil {
+		logger.LogAttrs(ctx, slog.LevelError, "error while validating tokens", slog.String("error", err.Error()))
+		respondWithError(w, http.StatusBadRequest, fmt.Sprintf("error while validating tokens: %s", err.Error()))
+		return
+	}
+
+	writeData(w, http.StatusOK, userID.String())
+	logger.LogAttrs(ctx, slog.LevelInfo, "user validated", slog.String("userID", userID.String()))
 }
 
 // SignUp lets you store user email and password in database

@@ -14,6 +14,7 @@ import (
 	context "context"
 	reflect "reflect"
 
+	uuid "github.com/google/uuid"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -97,4 +98,19 @@ func (m *MockServicer) SignUp(ctx context.Context, user *models.UserReq) error {
 func (mr *MockServicerMockRecorder) SignUp(ctx, user any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SignUp", reflect.TypeOf((*MockServicer)(nil).SignUp), ctx, user)
+}
+
+// ValidateTokens mocks base method.
+func (m *MockServicer) ValidateTokens(ctx context.Context, token string) (*uuid.UUID, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ValidateTokens", ctx, token)
+	ret0, _ := ret[0].(*uuid.UUID)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ValidateTokens indicates an expected call of ValidateTokens.
+func (mr *MockServicerMockRecorder) ValidateTokens(ctx, token any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidateTokens", reflect.TypeOf((*MockServicer)(nil).ValidateTokens), ctx, token)
 }

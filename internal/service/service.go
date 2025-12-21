@@ -2,7 +2,9 @@ package service
 
 import (
 	"context"
+	"errors"
 	"log/slog"
+	"strings"
 
 	"auth-rest-api/internal/models"
 	"auth-rest-api/internal/server"
@@ -162,6 +164,36 @@ func (s *Service) RevokeToken(ctx context.Context, token string) error {
 	}
 
 	return nil
+}
+
+func (s *Service) ValidateTokens(ctx context.Context, token string) (*uuid.UUID, error) {
+	logger := ctx.Value(server.Logger).(*slog.Logger)
+
+	if strings.TrimSpace(token) == "" {
+		logger.LogAttrs(ctx, slog.LevelError, "nil token for validation")
+		return nil, errors.New("nil token found")
+	}
+
+	accClaim, err := ParseToken(token, "access")
+	if err != nil {
+		logger.LogAttrs(ctx, slog.LevelError, "error while parsing access token", slog.String("error", err.Error()))
+		return nil, err
+	}
+
+	sub := accClaim.RegisteredClaims.Subject
+	if sub == "" {
+		logger.LogAttrs(ctx, slog.LevelError, "empty userID in claim")
+		return nil, errors.New("empty user id")
+	}
+
+	uid, err := uuid.Parse(sub)
+	if err != nil {
+		logger.LogAttrs(ctx, slog.LevelError, "error while parsing claim subject",
+			slog.String("error", err.Error()))
+		return nil, err
+	}
+
+	return &uid, nil
 }
 
 func (s *Service) tokenParsing(accToken, refToken string) (access, refresh *Claims, err error) {

@@ -67,6 +67,7 @@ func registerAuthRoutes(app *server.Server, h *handler.Handler) {
 		handler    http.HandlerFunc
 		middleware []server.Middleware
 	}{
+		{"POST /validate", h.Validate, []server.Middleware{correlationMiddleware}},
 		{"POST /signup", h.SignUp, []server.Middleware{correlationMiddleware}},
 		{"POST /signin", h.SignIn, []server.Middleware{correlationMiddleware}},
 		{"POST /refresh", h.RefreshToken, []server.Middleware{correlationMiddleware, authMiddleware}},
