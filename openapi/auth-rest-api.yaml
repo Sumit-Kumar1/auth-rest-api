@@ -130,6 +130,57 @@ paths:
                     type: string
                     example: "Not able to unmarshall body"
 
+  /validate:
+    post:
+      tags:
+        - User
+      summary: Validate access token and return user ID
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: header
+          name: Authorization
+          required: true
+          schema:
+            type: string
+            example: "Bearer <JWT_token>"
+      responses:
+        200:
+          description: Token is valid
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: string
+                    description: User ID (UUID)
+                    example: "550e8400-e29b-41d4-a716-446655440000"
+        401:
+          description: Invalid, expired, or revoked token
+          content:
+            application/json:
+              schema:
+                properties:
+                  code:
+                    type: integer
+                    example: 401
+                  message:
+                    type: string
+                    example: "Invalid token"
+        400:
+          description: Missing Authorization header
+          content:
+            application/json:
+              schema:
+                properties:
+                  code:
+                    type: integer
+                    example: 400
+                  message:
+                    type: string
+                    example: "Missing Authorization header"
+
   /refresh:
     post:
       tags:
@@ -235,12 +286,11 @@ components:
           example: "sumit@kumar.com"
         password:
           type: string
-          description: "a minimum of 8 character long password"
-          example: "sumit@kumar"
+          description: "password must be at least 8 characters and contain uppercase, lowercase, number, and special character"
+          example: "Sumit@Kumar123"
       required:
         - email
         - password
-
     SignResp:
       type: object
       properties:
