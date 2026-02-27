@@ -1,258 +1,172 @@
 package handler
 
 import (
-	"context"
-	"encoding/json"
 	"errors"
-	"fmt"
-	"io"
-	"log/slog"
 	"net/http"
 	"strings"
 
 	"auth-rest-api/internal/models"
-	"auth-rest-api/internal/server"
 
 	"github.com/google/uuid"
+	"github.com/labstack/echo/v5"
 )
 
 // Servicer defines the interface for service layer operations.
-// It provides methods for user authentication and token management.
 //
 //go:generate mockgen -source=handler.go -destination=mock_interface.go -package=handler
 type Servicer interface {
-	SignUp(ctx context.Context, user *models.UserReq) error
-	SignIn(ctx context.Context, user *models.UserReq) (*models.TokenResponse, error)
-	RefreshToken(ctx context.Context, accToken, refToken string) (*models.TokenResponse, error)
-	RevokeToken(ctx context.Context, accToken string) error
-	ValidateTokens(ctx context.Context, token string) (*uuid.UUID, error)
+	SignUp(ctx *echo.Context, user *models.UserReq) error
+	SignIn(ctx *echo.Context, user *models.UserReq) (*models.TokenResponse, error)
+	RefreshToken(ctx *echo.Context, accToken, refToken string) (*models.TokenResponse, error)
+	RevokeToken(ctx *echo.Context, accToken string) error
+	ValidateTokens(ctx *echo.Context, token string) (*uuid.UUID, error)
 }
 
-// Handler represents the HTTP request handler layer.
-// It processes incoming HTTP requests and delegates business logic to the service layer.
+// Handler processes HTTP requests and delegates to the service layer.
 type Handler struct {
 	Service Servicer
 }
 
-// New creates a new instance of the Handler with the provided service implementation.
-// It initializes the handler with the required dependencies.
+// New creates a new Handler with the provided service implementation.
 func New(s Servicer) *Handler {
 	return &Handler{Service: s}
 }
 
-func (h *Handler) Validate(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	logger := ctx.Value(server.Logger).(*slog.Logger)
-
-	authHeader := r.Header.Get("Authorization")
-	if strings.TrimSpace(authHeader) == "" {
-		logger.LogAttrs(ctx, slog.LevelError, "Missing Authorization header")
-		respondWithError(w, http.StatusUnauthorized, "Missing Authorization header")
-
-		return
+// extractBearerToken extracts and validates a Bearer token from the Authorization header.
+// Returns ErrUnauthorized if the header is missing, malformed, or not a Bearer token.
+func extractBearerToken(c *echo.Context) (string, error) {
+	header := c.Request().Header.Get("Authorization")
+	if !strings.HasPrefix(header, "Bearer ") {
+		return "", models.ErrUnauthorized
 	}
 
-	token := strings.TrimPrefix(authHeader, "Bearer ")
-
-	userID, err := h.Service.ValidateTokens(ctx, token)
-	if err != nil {
-		logger.LogAttrs(ctx, slog.LevelError, "error while validating tokens", slog.String("error", err.Error()))
-		respondWithError(w, http.StatusBadRequest, fmt.Sprintf("error while validating tokens: %s", err.Error()))
-		return
+	token := strings.TrimPrefix(header, "Bearer ")
+	if strings.TrimSpace(token) == "" {
+		return "", models.ErrUnauthorized
 	}
 
-	writeData(w, http.StatusOK, userID.String())
-	logger.LogAttrs(ctx, slog.LevelInfo, "user validated", slog.String("userID", userID.String()))
+	return token, nil
 }
 
-// SignUp lets you store user email and password in database
-func (h *Handler) SignUp(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	logger := ctx.Value(server.Logger).(*slog.Logger)
+// Validate checks a JWT token and returns the associated userID.
+func (h *Handler) Validate(c *echo.Context) error {
+	token, err := extractBearerToken(c)
+	if err != nil {
+		return respondWithError(c, http.StatusUnauthorized, "Unauthorized")
+	}
 
+	userID, err := h.Service.ValidateTokens(c, token)
+	if err != nil {
+		return respondWithError(c, http.StatusUnauthorized, "Unauthorized")
+	}
+
+	return writeData(c, http.StatusOK, map[string]string{"userID": userID.String()})
+}
+
+// SignUp registers a new user with email and password.
+func (h *Handler) SignUp(c *echo.Context) error {
 	var u models.UserReq
 
-	if r.Body == nil {
-		respondWithError(w, http.StatusBadRequest, "missing request body")
-		return
+	if err := c.Bind(&u); err != nil {
+		return respondWithError(c, http.StatusBadRequest, "invalid request body")
 	}
 
-	if err := json.NewDecoder(r.Body).Decode(&u); err != nil {
-		respondWithError(w, http.StatusBadRequest, fmt.Sprintf("failed to bind body - %s", err.Error()))
-		return
-	}
-
-	defer func(body io.ReadCloser) { _ = body.Close() }(r.Body)
-
-	if err := h.Service.SignUp(ctx, &u); err != nil {
+	if err := h.Service.SignUp(c, &u); err != nil {
 		switch {
-		case models.ErrUserAlreadyExists.Is(err):
-			respondWithError(w, http.StatusConflict, fmt.Sprintf("failed to sign up - %s", err.Error()))
-			logger.LogAttrs(ctx, slog.LevelError, err.Error())
-
-			return
-
-		case errors.Is(err, models.ErrBadRequest(err)):
-			respondWithError(w, http.StatusBadRequest, err.Error())
-			logger.LogAttrs(ctx, slog.LevelError, err.Error())
-
-			return
+		case errors.Is(err, models.ErrUserAlreadyExists):
+			return respondWithError(c, http.StatusConflict, "user already exists")
 
 		default:
-			respondWithError(w, http.StatusInternalServerError, fmt.Sprintf("failed to sign up - %s", err.Error()))
-			logger.LogAttrs(ctx, slog.LevelError, err.Error())
+			var httpErr *models.HTTPError
+			if errors.As(err, &httpErr) {
+				return respondWithError(c, httpErr.Code, httpErr.Message)
+			}
 
-			return
+			return respondWithError(c, http.StatusInternalServerError, "internal server error")
 		}
 	}
 
-	writeData(w, http.StatusCreated, "user created successfully")
-	logger.LogAttrs(ctx, slog.LevelInfo, "user signed up successfully", slog.String("email", u.Email))
+	return writeData(c, http.StatusCreated, map[string]string{"message": "user created successfully"})
 }
 
-// SignIn lets you authenticate user with user details and JWT token
-func (h *Handler) SignIn(w http.ResponseWriter, r *http.Request) {
+// SignIn authenticates a user and returns access + refresh tokens.
+func (h *Handler) SignIn(c *echo.Context) error {
 	var u models.UserReq
 
-	ctx := r.Context()
-	logger := ctx.Value(server.Logger).(*slog.Logger)
-
-	if r.Body == nil {
-		respondWithError(w, http.StatusBadRequest, "Request body missing")
-		return
+	if err := c.Bind(&u); err != nil {
+		return respondWithError(c, http.StatusBadRequest, "invalid request body")
 	}
 
-	if err := json.NewDecoder(r.Body).Decode(&u); err != nil {
-		respondWithError(w, http.StatusBadRequest, fmt.Sprintf("failed to bind body - %s", err.Error()))
-		logger.LogAttrs(ctx, slog.LevelError, "failed to bind body", slog.String("error", err.Error()))
-
-		return
-	}
-
-	defer func(body io.ReadCloser) { _ = body.Close() }(r.Body)
-
-	tokenResp, err := h.Service.SignIn(ctx, &u)
+	tokenResp, err := h.Service.SignIn(c, &u)
 	if err != nil {
-		switch {
-		case errors.Is(err, models.ErrUserNotFound):
-			respondWithError(w, http.StatusNotFound, err.Error())
-			logger.LogAttrs(ctx, slog.LevelError, "user not found", slog.String("email", u.Email))
-
-			return
-
-		case errors.Is(err, models.ErrBadRequest(err)):
-			respondWithError(w, http.StatusBadRequest, err.Error())
-			logger.LogAttrs(ctx, slog.LevelError, err.Error())
-
-			return
-
-		default:
-			respondWithError(w, http.StatusInternalServerError, fmt.Sprintf("failed to sign up - %s", err.Error()))
-			logger.LogAttrs(ctx, slog.LevelError, err.Error())
-
-			return
+		var httpErr *models.HTTPError
+		if errors.As(err, &httpErr) {
+			return respondWithError(c, httpErr.Code, httpErr.Message)
 		}
+
+		// All auth failures return generic 401 to prevent user enumeration
+		return respondWithError(c, http.StatusUnauthorized, "Unauthorized")
 	}
 
-	resp := models.UserResp{
+	return writeData(c, http.StatusOK, models.UserResp{
 		Email:        u.Email,
 		AccessToken:  tokenResp.AccessToken,
 		RefreshToken: tokenResp.RefreshToken,
-	}
-
-	writeData(w, http.StatusCreated, resp)
-	logger.LogAttrs(ctx, slog.LevelInfo, "user signed in", slog.String("email", u.Email))
+	})
 }
 
-func (h *Handler) RefreshToken(w http.ResponseWriter, r *http.Request) {
-	t := struct {
-		Token string `json:"refreshToken"`
-	}{}
-
-	ctx := r.Context()
-	logger := ctx.Value(server.Logger).(*slog.Logger)
-
-	authHeader := r.Header.Get("Authorization")
-	if authHeader == "" {
-		logger.LogAttrs(ctx, slog.LevelError, "Missing Authorization header")
-		respondWithError(w, http.StatusUnauthorized, "Missing Authorization header")
-
-		return
-	}
-
-	token := strings.TrimPrefix(authHeader, "Bearer ")
-
-	if err := json.NewDecoder(r.Body).Decode(&t); err != nil {
-		logger.LogAttrs(ctx, slog.LevelError, "failed to bind body", slog.String("error", err.Error()))
-		respondWithError(w, http.StatusBadRequest, fmt.Sprintf("failed to bind body - %s", err.Error()))
-
-		return
-	}
-
-	defer func(body io.ReadCloser) { _ = body.Close() }(r.Body)
-
-	tokenResp, err := h.Service.RefreshToken(ctx, token, t.Token)
+// RefreshToken issues a new token pair using a valid access + refresh token.
+func (h *Handler) RefreshToken(c *echo.Context) error {
+	token, err := extractBearerToken(c)
 	if err != nil {
-		respondWithError(w, http.StatusUnauthorized, fmt.Sprintf("failed to refresh token - %s", err.Error()))
-		logger.LogAttrs(ctx, slog.LevelError, err.Error())
-
-		return
+		return respondWithError(c, http.StatusUnauthorized, "Unauthorized")
 	}
 
-	userResp := models.UserResp{
+	var body struct {
+		Token string `json:"refreshToken"`
+	}
+
+	if err := c.Bind(&body); err != nil {
+		return respondWithError(c, http.StatusBadRequest, "invalid request body")
+	}
+
+	if strings.TrimSpace(body.Token) == "" {
+		return respondWithError(c, http.StatusBadRequest, "refreshToken is required")
+	}
+
+	tokenResp, err := h.Service.RefreshToken(c, token, body.Token)
+	if err != nil {
+		if errors.Is(err, models.ErrTokenRevoked) || errors.Is(err, models.ErrUnauthorized) {
+			return respondWithError(c, http.StatusUnauthorized, "Unauthorized")
+		}
+
+		return respondWithError(c, http.StatusInternalServerError, "internal server error")
+	}
+
+	return writeData(c, http.StatusOK, models.UserResp{
 		AccessToken:  tokenResp.AccessToken,
 		RefreshToken: tokenResp.RefreshToken,
-	}
-
-	writeData(w, http.StatusOK, userResp)
-	logger.LogAttrs(ctx, slog.LevelInfo, "user refreshed token")
+	})
 }
 
-func (h *Handler) RevokeToken(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	logger := ctx.Value(server.Logger).(*slog.Logger)
-
-	authHeader := r.Header.Get("Authorization")
-	if authHeader == "" {
-		logger.LogAttrs(ctx, slog.LevelError, "Missing Authorization header")
-		respondWithError(w, http.StatusUnauthorized, "Missing Authorization header")
-
-		return
-	}
-
-	token := strings.TrimPrefix(authHeader, "Bearer ")
-
-	if err := h.Service.RevokeToken(ctx, token); err != nil {
-		logger.LogAttrs(ctx, slog.LevelError, "failed to revoke token", slog.String("error", err.Error()))
-		respondWithError(w, http.StatusInternalServerError, "Failed to revoke token")
-
-		return
-	}
-
-	writeData(w, http.StatusNoContent, "token revoked successfully")
-	logger.LogAttrs(ctx, slog.LevelInfo, "revoked token")
-}
-
-func respondWithError(w http.ResponseWriter, code int, reason string) {
-	errHTTP := models.NewHTTPError(code, reason, "")
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(errHTTP.Code)
-
-	if err := json.NewEncoder(w).Encode(errHTTP); err != nil {
-		http.Error(w, "failed to write response", http.StatusInternalServerError)
-	}
-}
-
-func writeData[T any](w http.ResponseWriter, code int, resp T) {
-	w.WriteHeader(code)
-	w.Header().Set("Content-Type", "application/json")
-
-	data, err := json.Marshal(resp)
+// RevokeToken invalidates the provided access token (logout).
+func (h *Handler) RevokeToken(c *echo.Context) error {
+	token, err := extractBearerToken(c)
 	if err != nil {
-		respondWithError(w, http.StatusServiceUnavailable, err.Error())
-		return
+		return respondWithError(c, http.StatusUnauthorized, "Unauthorized")
 	}
 
-	_, _ = w.Write(json.RawMessage(`{"data":` + string(data) + `}`))
+	if err := h.Service.RevokeToken(c, token); err != nil {
+		return respondWithError(c, http.StatusInternalServerError, "internal server error")
+	}
+
+	return c.NoContent(http.StatusNoContent)
+}
+
+func respondWithError(c *echo.Context, code int, message string) error {
+	return c.JSON(code, models.NewHTTPError(code, message, ""))
+}
+
+func writeData[T any](c *echo.Context, code int, resp T) error {
+	return c.JSON(code, map[string]T{"data": resp})
 }

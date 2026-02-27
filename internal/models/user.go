@@ -3,6 +3,7 @@ package models
 import (
 	"regexp"
 	"strings"
+	"unicode"
 )
 
 // UserReq represents the request payload for user-related operations.
@@ -55,25 +56,60 @@ func ValidateEmail(email string) error {
 	emailRegex := regexp.MustCompile(`^[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,4}$`)
 
 	if email == "" {
-		return ErrRequired("email")
+		return ErrEmailRequired
 	}
 
 	if !emailRegex.MatchString(email) {
-		return ErrInvalid("email")
+		return ErrEmailInvalid
 	}
 
 	return nil
 }
 
 func validatePassword(password string) error {
-	passwd := strings.TrimSpace(password)
+	var (
+		hasUpper   = false
+		hasLower   = false
+		hasNumber  = false
+		hasSpecial = false
+		passwd     = strings.TrimSpace(password)
+	)
 
 	if passwd == "" {
-		return ErrRequired("password")
+		return ErrPasswordRequired
 	}
 
 	if len(passwd) < 8 {
-		return ErrInvalid("password")
+		return ErrPasswordTooShort
+	}
+
+	for _, char := range passwd {
+		switch {
+		case unicode.IsUpper(char):
+			hasUpper = true
+		case unicode.IsLower(char):
+			hasLower = true
+		case unicode.IsNumber(char):
+			hasNumber = true
+		case unicode.IsPunct(char) || unicode.IsSymbol(char):
+			hasSpecial = true
+		}
+	}
+
+	if !hasUpper {
+		return ErrPasswordNoUpper
+	}
+
+	if !hasLower {
+		return ErrPasswordNoLower
+	}
+
+	if !hasNumber {
+		return ErrPasswordNoNumber
+	}
+
+	if !hasSpecial {
+		return ErrPasswordNoSpecial
 	}
 
 	return nil

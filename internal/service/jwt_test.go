@@ -23,18 +23,27 @@ func Test_getJWTSecrets(t *testing.T) {
 		refEnv            string
 		wantAccessSecret  []byte
 		wantRefreshSecret []byte
+		wantErr           bool
 	}{
 		{
-			name: "missing access secret", accEnv: "", wantAccessSecret: []byte("my_secret_key"),
-			wantRefreshSecret: []byte("my_refresh_secret_key"),
+			name:    "missing access secret",
+			accEnv:  "",
+			refEnv:  "XYZ",
+			wantErr: true,
 		},
 		{
-			name: "missing refresh secret", accEnv: "ABCD", wantAccessSecret: []byte("my_secret_key"),
-			wantRefreshSecret: []byte("my_refresh_secret_key"),
+			name:    "missing refresh secret",
+			accEnv:  "ABCD",
+			refEnv:  "",
+			wantErr: true,
 		},
 		{
-			name: "valid secrets", accEnv: "ABCD", refEnv: "XYZ", wantAccessSecret: []byte("ABCD"),
+			name:              "valid secrets",
+			accEnv:            "ABCD",
+			refEnv:            "XYZ",
+			wantAccessSecret:  []byte("ABCD"),
 			wantRefreshSecret: []byte("XYZ"),
+			wantErr:           false,
 		},
 	}
 
@@ -43,9 +52,14 @@ func Test_getJWTSecrets(t *testing.T) {
 			t.Setenv("ACCESS_SECRET", tt.accEnv)
 			t.Setenv("REFRESH_SECRET", tt.refEnv)
 
-			gotAccessSecret, gotRefreshSecret := getJWTSecrets()
-			assert.Equalf(t, tt.wantAccessSecret, gotAccessSecret, testFailStr, i, tt.name)
-			assert.Equalf(t, tt.wantRefreshSecret, gotRefreshSecret, testFailStr, i, tt.name)
+			gotAccessSecret, gotRefreshSecret, err := getJWTSecrets()
+			if tt.wantErr {
+				assert.Errorf(t, err, testFailStr, i, tt.name)
+			} else {
+				assert.NoErrorf(t, err, testFailStr, i, tt.name)
+				assert.Equalf(t, tt.wantAccessSecret, gotAccessSecret, testFailStr, i, tt.name)
+				assert.Equalf(t, tt.wantRefreshSecret, gotRefreshSecret, testFailStr, i, tt.name)
+			}
 		})
 	}
 }
@@ -59,7 +73,8 @@ func TestParseToken(t *testing.T) {
 	t.Setenv("ACCESS_SECRET", "ABCD")
 	t.Setenv("REFRESH_SECRET", "XYZ")
 
-	accessKey, refKey := getJWTSecrets()
+	accessKey, refKey, err := getJWTSecrets()
+	assert.NoError(t, err)
 
 	accClaims := Claims{
 		Email:    email,
@@ -114,7 +129,7 @@ func TestParseToken(t *testing.T) {
 		{
 			name:  "invalid token type",
 			token: valRefToken, tokenType: "ref",
-			wantErr: models.ErrInvalid("token type"),
+			wantErr: models.ErrInvalidTokenType,
 		},
 		{
 			name: "invalid token",

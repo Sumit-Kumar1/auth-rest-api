@@ -2,62 +2,31 @@ package server
 
 import (
 	"context"
-	"log/slog"
+	"errors"
 	"net/http"
 	"os"
 	"strings"
+	"sync"
+	"time"
+
+	"auth-rest-api/internal/models"
 
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/google/uuid"
+	"github.com/labstack/echo/v5"
 )
 
-// ContextKey is a type for context keys used in the application.
-// It ensures type safety when using context values.
-type ContextKey string
+// SecurityHeadersMiddleware adds common security-related HTTP headers to every response.
+func SecurityHeadersMiddleware() echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c *echo.Context) error {
+			c.Response().Header().Set("X-Content-Type-Options", "nosniff")
+			c.Response().Header().Set("X-Frame-Options", "DENY")
+			c.Response().Header().Set("Strict-Transport-Security", "max-age=63072000; includeSubDomains; preload")
+			c.Response().Header().Set("Content-Security-Policy", "default-src 'self'")
+			c.Response().Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
+			c.Response().Header().Set("Permissions-Policy", "geolocation=(), microphone=(), camera=()")
 
-const (
-	CorrelationID     ContextKey = "correlationId"
-	Logger            ContextKey = "logger"
-	headerCorrelation            = "X-Correlation-ID"
-)
-
-// Middleware is a function type that wraps an HTTP handler.
-// It can be used to add functionality before or after the handler execution.
-type Middleware func(http.HandlerFunc) http.HandlerFunc
-
-// Chain applies multiple middleware functions to an HTTP handler.
-// It composes the middleware functions in the order they are provided.
-// Returns a new handler that includes all the middleware functionality.
-func Chain(f http.HandlerFunc, middlewares ...Middleware) http.HandlerFunc {
-	for _, m := range middlewares {
-		f = m(f)
-	}
-
-	return f
-}
-
-// AddCorrelation creates a middleware that adds a correlation ID to each request.
-// It generates a unique ID for each request and adds it to the context.
-// It also creates a structured logger with request information.
-func AddCorrelation() Middleware {
-	return func(f http.HandlerFunc) http.HandlerFunc {
-		return func(w http.ResponseWriter, r *http.Request) {
-			corrID := r.Header.Get(headerCorrelation)
-			if strings.TrimSpace(corrID) == "" {
-				corrID = uuid.NewString()
-			}
-
-			logger := slog.With(slog.Group("request",
-				slog.String(headerCorrelation, corrID),
-				slog.String("method", r.Method),
-				slog.String("path", r.URL.Path),
-				slog.String("host", r.Host),
-				slog.String("remote-addr", r.RemoteAddr),
-			))
-
-			ctx := context.WithValue(r.Context(), Logger, logger)
-
-			f(w, r.WithContext(context.WithValue(ctx, CorrelationID, corrID)))
+			return next(c)
 		}
 	}
 }
@@ -65,40 +34,136 @@ func AddCorrelation() Middleware {
 // AuthMiddleware creates a middleware that validates JWT tokens.
 // It checks for the presence of an Authorization header and validates the token.
 // Returns an unauthorized error if the token is missing or invalid.
-func AuthMiddleware() Middleware {
-	return func(f http.HandlerFunc) http.HandlerFunc {
-		return func(w http.ResponseWriter, r *http.Request) {
-			authHeader := r.Header.Get("Authorization")
-			if authHeader == "" {
-				http.Error(w, "Unauthorized", http.StatusUnauthorized)
-				return
+func AuthMiddleware() echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c *echo.Context) error {
+			token, err := validate(c.Request().Header.Get("Authorization"))
+			if err != nil {
+				return c.JSON(http.StatusUnauthorized, map[string]string{"message": "Unauthorized"})
 			}
 
-			tokenString := strings.TrimPrefix(authHeader, "Bearer ")
-
-			token, err := jwt.Parse(tokenString, func(_ *jwt.Token) (any, error) {
-				return getJWTSecret(), nil
-			})
-			if err != nil || !token.Valid {
-				slog.Log(context.Background(), slog.LevelError, "invalid token", slog.String("err", err.Error()))
-				http.Error(w, "Invalid token", http.StatusUnauthorized)
-
-				return
+			if token != "" {
+				ctx := context.WithValue(c.Request().Context(), "userID", token)
+				c.SetRequest(c.Request().WithContext(ctx))
 			}
 
-			f(w, r)
+			return next(c)
 		}
 	}
 }
 
-// getJWTSecret retrieves the JWT signing secret from environment variables.
-// It returns the secret key for signing JWT tokens.
-// If the environment variable is not set, it returns a default value.
-func getJWTSecret() []byte {
-	secret := os.Getenv("ACCESS_SECRET")
-	if secret == "" {
-		return []byte("my_secret_key")
+func validate(authHeader string) (string, error) {
+	if strings.TrimSpace(authHeader) == "" {
+		return "", models.ErrUnauthorized
 	}
 
-	return []byte(secret)
+	tokenString := strings.TrimPrefix(authHeader, "Bearer ")
+
+	secret, err := getJWTSecret()
+	if err != nil {
+		return "", err
+	}
+
+	token, err := jwt.Parse(tokenString, func(_ *jwt.Token) (any, error) {
+		return secret, nil
+	})
+	if err != nil || !token.Valid {
+		return "", models.ErrUnauthorized
+	}
+
+	return token.Claims.GetSubject()
+}
+
+// getJWTSecret retrieves the JWT signing secret from environment variables.
+func getJWTSecret() ([]byte, error) {
+	secret := os.Getenv("ACCESS_SECRET")
+	if secret == "" {
+		return nil, errors.New("ACCESS_SECRET environment variable is required")
+	}
+
+	return []byte(secret), nil
+}
+
+// RateLimitStore stores rate limit information per IP address
+type RateLimitStore struct {
+	mu    sync.Mutex
+	store map[string]*RateLimit
+}
+
+// RateLimit tracks requests for a specific IP
+type RateLimit struct {
+	requests []time.Time
+	lastSeen time.Time
+}
+
+// NewRateLimitStore creates a new rate limit store
+func NewRateLimitStore() *RateLimitStore {
+	return &RateLimitStore{
+		store: make(map[string]*RateLimit),
+	}
+}
+
+// IsAllowed checks if a request from the given IP is allowed based on the limit
+func (s *RateLimitStore) IsAllowed(ip string, requestsPerMinute int) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	now := time.Now()
+	limit, exists := s.store[ip]
+
+	if !exists {
+		s.store[ip] = &RateLimit{
+			requests: []time.Time{now},
+			lastSeen: now,
+		}
+		return true
+	}
+
+	cutoff := now.Add(-time.Minute)
+	validRequests := []time.Time{}
+	for _, req := range limit.requests {
+		if req.After(cutoff) {
+			validRequests = append(validRequests, req)
+		}
+	}
+
+	if len(validRequests) >= requestsPerMinute {
+		return false
+	}
+
+	validRequests = append(validRequests, now)
+	s.store[ip] = &RateLimit{
+		requests: validRequests,
+		lastSeen: now,
+	}
+
+	return true
+}
+
+// Cleanup removes old entries (call periodically)
+func (s *RateLimitStore) Cleanup() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	now := time.Now()
+	for ip, limit := range s.store {
+		if now.Sub(limit.lastSeen) > 10*time.Minute {
+			delete(s.store, ip)
+		}
+	}
+}
+
+// RateLimitMiddleware creates a middleware that rate limits requests by IP
+func RateLimitMiddleware(store *RateLimitStore, requestsPerMinute int) echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c *echo.Context) error {
+			ip := c.RealIP()
+
+			if !store.IsAllowed(ip, requestsPerMinute) {
+				return c.JSON(http.StatusTooManyRequests, map[string]string{"message": "Too many requests"})
+			}
+
+			return next(c)
+		}
+	}
 }

@@ -2,89 +2,71 @@ package models
 
 import (
 	"errors"
-	"fmt"
+	"net/http"
 )
 
-const (
-	invalidFormat  = "invalid %s"
-	requiredFormat = "%s is required"
-)
-
+// Sentinel errors — compare with errors.Is(err, models.ErrXxx).
 var (
-	ErrDBNotConnected    = NewConstError("database not connected")
-	ErrTokenRevoked      = NewConstError("token is revoked")
-	ErrUserAlreadyExists = NewConstError("user already exists")
-	ErrPasswordMismatch  = NewConstError("password does not match")
-	ErrUserNotFound      = NewConstError("user does not exist")
+	// Infrastructure
+	ErrDBNotConnected = errors.New("database not connected")
+
+	// Authentication
+	ErrUnauthorized     = errors.New("unauthorized")
+	ErrPasswordMismatch = errors.New("password does not match")
+	ErrAccountLocked    = errors.New("account is temporarily locked")
+
+	// Token
+	ErrTokenRevoked    = errors.New("token is revoked")
+	ErrInvalidTokenType = errors.New("invalid token type")
+
+	// User
+	ErrUserAlreadyExists = errors.New("user already exists")
+	ErrUserNotFound      = errors.New("user does not exist")
+
+	// Validation: email
+	ErrEmailRequired = errors.New("email is required")
+	ErrEmailInvalid  = errors.New("invalid email")
+
+	// Validation: password
+	ErrPasswordRequired  = errors.New("password is required")
+	ErrPasswordTooShort  = errors.New("password must be at least 8 characters")
+	ErrPasswordNoUpper   = errors.New("password must contain at least one uppercase letter")
+	ErrPasswordNoLower   = errors.New("password must contain at least one lowercase letter")
+	ErrPasswordNoNumber  = errors.New("password must contain at least one number")
+	ErrPasswordNoSpecial = errors.New("password must contain at least one special character")
+
+	// Validation: general
+	ErrInvalidInput = errors.New("invalid input")
 )
 
-// CustomError represents an error that can be sent in HTTP responses.
-// It includes an HTTP status code and an error message.
-type CustomError struct {
+// HTTPError is an error carrying an HTTP status code for API responses.
+// Use Unwrap() to access the underlying domain error for errors.Is checks.
+type HTTPError struct {
 	Code    int    `json:"code"`
 	Message string `json:"message"`
 	Details string `json:"details,omitempty"`
+	Err     error  `json:"-"`
 }
 
-// Error implements the error interface for CustomError.
-// It returns the error message.
-func (e *CustomError) Error() string {
+func (e *HTTPError) Error() string {
 	return e.Message
 }
 
-// NewHTTPError created a custom error based on code, msg and detail of error,
-// use only at handler layer
-func NewHTTPError(code int, msg, details string) *CustomError {
-	return &CustomError{
-		Code:    code,
-		Message: msg,
-		Details: details,
+func (e *HTTPError) Unwrap() error {
+	return e.Err
+}
+
+// NewHTTPError creates an HTTPError for handler-layer JSON responses.
+func NewHTTPError(code int, msg, details string) *HTTPError {
+	return &HTTPError{Code: code, Message: msg, Details: details}
+}
+
+// ErrBadRequest wraps err as a 400 Bad Request.
+// The original error is preserved for errors.Is / errors.As checks.
+func ErrBadRequest(err error) *HTTPError {
+	return &HTTPError{
+		Code:    http.StatusBadRequest,
+		Message: err.Error(),
+		Err:     err,
 	}
-}
-
-// ErrBadRequest creates an error for bad request scenarios.
-// It wraps the provided error in a CustomError with a 400 status code.
-func ErrBadRequest(err error) *CustomError {
-	return NewHTTPError(400, err.Error(), "")
-}
-
-// ConstError is a type that implements the error interface.
-// It's used for creating constant error values for internal error use.
-type ConstError string
-
-// NewConstError creates a new constant error with the given message.
-// It returns a constError that can be used as a constant error value.
-func NewConstError(message string) ConstError {
-	return ConstError(message)
-}
-
-// Error implements the error interface for constError.
-// It returns the string representation of the error.
-func (err ConstError) Error() string {
-	return string(err)
-}
-
-// Is implements error comparison for constError.
-// It allows checking if an error matches a specific constError value.
-func (err ConstError) Is(target error) bool {
-	var t ConstError
-
-	ok := errors.As(target, &t)
-	if !ok {
-		return false
-	}
-
-	return err == t
-}
-
-// ErrInvalid creates an error for invalid entity scenarios.
-// It formats the error message using the invalidFormat constant.
-func ErrInvalid(entity string) error {
-	return NewConstError(fmt.Sprintf(invalidFormat, entity))
-}
-
-// ErrRequired creates an error for required field scenarios.
-// It formats the error message using the requiredFormat constant.
-func ErrRequired(entity string) error {
-	return NewConstError(fmt.Sprintf(requiredFormat, entity))
 }

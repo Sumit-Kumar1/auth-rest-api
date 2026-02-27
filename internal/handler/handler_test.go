@@ -2,17 +2,14 @@ package handler
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"testing"
 
 	"auth-rest-api/internal/models"
-	"auth-rest-api/internal/server"
 
+	"github.com/labstack/echo/v5"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/mock/gomock"
 )
@@ -23,9 +20,6 @@ func TestHandler_SignUp(t *testing.T) {
 
 	mockService := NewMockServicer(ctrl)
 	h := New(mockService)
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-
-	ctx := context.WithValue(context.Background(), server.Logger, logger)
 
 	tests := []struct {
 		name        string
@@ -37,14 +31,16 @@ func TestHandler_SignUp(t *testing.T) {
 			name:        "Successful SignUp",
 			requestBody: json.RawMessage(`{"email":"testuser@gmail.com","password":"12345"}`),
 			mockCall: func() {
-				mockService.EXPECT().SignUp(ctx, gomock.Any()).Return(nil)
+				mockService.EXPECT().SignUp(gomock.Any(), gomock.Any()).Return(nil)
 			},
 			expCode: http.StatusCreated,
 		},
 		{
-			name:     "Request Body Missing",
-			mockCall: func() {},
-			expCode:  http.StatusBadRequest,
+			name: "Request Body Missing",
+			mockCall: func() {
+				mockService.EXPECT().SignUp(gomock.Any(), gomock.Any()).Return(models.ErrBadRequest(models.ErrEmailRequired))
+			},
+			expCode: http.StatusBadRequest,
 		},
 		{
 			name:        "Invalid JSON",
@@ -53,10 +49,10 @@ func TestHandler_SignUp(t *testing.T) {
 			expCode:     http.StatusBadRequest,
 		},
 		{
-			name:        "User  Already Exists",
+			name:        "User Already Exists",
 			requestBody: json.RawMessage(`{"email":"testuser@gmail.com","password":"12345"}`),
 			mockCall: func() {
-				mockService.EXPECT().SignUp(ctx, gomock.Any()).Return(models.ErrUserAlreadyExists)
+				mockService.EXPECT().SignUp(gomock.Any(), gomock.Any()).Return(models.ErrUserAlreadyExists)
 			},
 			expCode: http.StatusConflict,
 		},
@@ -64,7 +60,7 @@ func TestHandler_SignUp(t *testing.T) {
 			name:        "Internal Server Error",
 			requestBody: json.RawMessage(`{"email":"testuser@gmail.com","password":"12345"}`),
 			mockCall: func() {
-				mockService.EXPECT().SignUp(ctx, gomock.Any()).Return(models.ErrDBNotConnected)
+				mockService.EXPECT().SignUp(gomock.Any(), gomock.Any()).Return(models.ErrDBNotConnected)
 			},
 			expCode: http.StatusInternalServerError,
 		},
@@ -74,12 +70,21 @@ func TestHandler_SignUp(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			tt.mockCall()
 
-			w := httptest.NewRecorder()
-			r := httptest.NewRequestWithContext(ctx, "POST", "/sign-up", bytes.NewBuffer(tt.requestBody))
+			e := echo.New()
+			var req *http.Request
+			if tt.requestBody != nil {
+				req = httptest.NewRequest(http.MethodPost, "/signup", bytes.NewBuffer(tt.requestBody))
+				req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+			} else {
+				req = httptest.NewRequest(http.MethodPost, "/signup", nil)
+			}
 
-			h.SignUp(w, r)
+			rec := httptest.NewRecorder()
+			c := e.NewContext(req, rec)
 
-			assert.Equalf(t, tt.expCode, w.Code, "TEST[%d] Failed - %s", i, tt.name)
+			_ = h.SignUp(c)
+
+			assert.Equalf(t, tt.expCode, rec.Code, "TEST[%d] Failed - %s", i, tt.name)
 		})
 	}
 }

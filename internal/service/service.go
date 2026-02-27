@@ -1,15 +1,13 @@
 package service
 
 import (
-	"context"
 	"errors"
-	"log/slog"
 	"strings"
 
 	"auth-rest-api/internal/models"
-	"auth-rest-api/internal/server"
 
 	"github.com/google/uuid"
+	"github.com/labstack/echo/v5"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -18,12 +16,16 @@ import (
 //
 //go:generate mockgen -source=service.go -destination=mock_interface.go -package=service
 type Storer interface {
-	CreateUser(ctx context.Context, u *models.UserData) error
-	GetUserByEmail(ctx context.Context, email string) (*models.UserData, error)
+	CreateUser(ctx *echo.Context, u *models.UserData) error
+	GetUserByEmail(ctx *echo.Context, email string) (*models.UserData, error)
 
-	IsTokenRevoked(ctx context.Context, tokenID string) (bool, error)
-	CreateToken(ctx context.Context, email string, td *models.TokenData) error
-	DeleteToken(ctx context.Context, email, accTokenID, refTokenID string) error
+	IsTokenRevoked(ctx *echo.Context, tokenID string) (bool, error)
+	CreateToken(ctx *echo.Context, email string, td *models.TokenData) error
+	DeleteToken(ctx *echo.Context, email, accTokenID, refTokenID string) error
+
+	IncrementFailedLogin(ctx *echo.Context, email string) (int, error)
+	ResetFailedLogin(ctx *echo.Context, email string) error
+	IsAccountLocked(ctx *echo.Context, email string) (bool, error)
 }
 
 // Service represents the core business logic layer.
@@ -38,12 +40,9 @@ func New(s Storer) *Service {
 	return &Service{Store: s}
 }
 
-func (s *Service) SignUp(ctx context.Context, user *models.UserReq) error {
-	logger := ctx.Value(server.Logger).(*slog.Logger)
-
+func (s *Service) SignUp(ctx *echo.Context, user *models.UserReq) error {
 	if user == nil {
-		logger.LogAttrs(ctx, slog.LevelError, "signup-service: empty user struct provided")
-		return models.ErrBadRequest(models.ErrInvalid("user input"))
+		return models.ErrBadRequest(models.ErrInvalidInput)
 	}
 
 	if err := user.Validate(); err != nil {
@@ -51,7 +50,7 @@ func (s *Service) SignUp(ctx context.Context, user *models.UserReq) error {
 	}
 
 	exUser, err := s.Store.GetUserByEmail(ctx, user.Email)
-	if err != nil && !models.ErrUserNotFound.Is(err) {
+	if err != nil && !errors.Is(err, models.ErrUserNotFound) {
 		return err
 	}
 
@@ -77,27 +76,40 @@ func (s *Service) SignUp(ctx context.Context, user *models.UserReq) error {
 	return nil
 }
 
-func (s *Service) SignIn(ctx context.Context, user *models.UserReq) (*models.TokenResponse, error) {
-	logger := ctx.Value(server.Logger).(*slog.Logger)
-
+func (s *Service) SignIn(ctx *echo.Context, user *models.UserReq) (*models.TokenResponse, error) {
 	if user == nil {
-		logger.LogAttrs(ctx, slog.LevelError, "empty user struct provided")
-		return nil, models.ErrBadRequest(models.ErrInvalid("user"))
+		return nil, models.ErrBadRequest(models.ErrInvalidInput)
 	}
 
 	if valErr := user.Validate(); valErr != nil {
 		return nil, models.ErrBadRequest(valErr)
 	}
 
-	exUser, err := s.Store.GetUserByEmail(ctx, user.Email)
+	// Check if account is locked due to too many failed login attempts
+	isLocked, err := s.Store.IsAccountLocked(ctx, user.Email)
 	if err != nil {
 		return nil, err
 	}
 
+	if isLocked {
+		return nil, models.ErrAccountLocked
+	}
+
+	exUser, err := s.Store.GetUserByEmail(ctx, user.Email)
+	if err != nil {
+		// Increment failed login counter on user not found
+		s.Store.IncrementFailedLogin(ctx, user.Email)
+		return nil, err
+	}
+
 	if err = bcrypt.CompareHashAndPassword(exUser.Password, []byte(user.Password)); err != nil {
-		logger.LogAttrs(ctx, slog.LevelError, "wrong password")
+		// Increment failed login counter on password mismatch
+		s.Store.IncrementFailedLogin(ctx, user.Email)
 		return nil, models.ErrPasswordMismatch
 	}
+
+	// Reset failed login counter on successful login
+	s.Store.ResetFailedLogin(ctx, user.Email)
 
 	tokenData, err := GenerateToken(exUser.ID, exUser.Email)
 	if err != nil {
@@ -114,7 +126,7 @@ func (s *Service) SignIn(ctx context.Context, user *models.UserReq) (*models.Tok
 	}, nil
 }
 
-func (s *Service) RefreshToken(ctx context.Context, accessToken, refreshToken string) (*models.TokenResponse, error) {
+func (s *Service) RefreshToken(ctx *echo.Context, accessToken, refreshToken string) (*models.TokenResponse, error) {
 	accessClaim, refreshClaim, err := s.tokenParsing(accessToken, refreshToken)
 	if err != nil {
 		return nil, err
@@ -145,18 +157,26 @@ func (s *Service) RefreshToken(ctx context.Context, accessToken, refreshToken st
 		return nil, err
 	}
 
-	return &models.TokenResponse{AccessToken: td.AccessToken,
-		RefreshToken: td.RefreshToken}, nil
+	return &models.TokenResponse{
+		AccessToken:  td.AccessToken,
+		RefreshToken: td.RefreshToken,
+	}, nil
 }
 
 // RevokeToken revokes the provided token, deletes stored token too
-func (s *Service) RevokeToken(ctx context.Context, token string) error {
-	logger := ctx.Value(server.Logger).(*slog.Logger)
-
+func (s *Service) RevokeToken(ctx *echo.Context, token string) error {
 	accClaims, err := ParseToken(token, "access")
 	if err != nil {
-		logger.LogAttrs(ctx, slog.LevelError, "invalid access token", slog.String("error", err.Error()))
 		return err
+	}
+
+	// Check if already revoked for idempotency
+	isRevoked, err := s.Store.IsTokenRevoked(ctx, accClaims.ClaimUID)
+	if err != nil {
+		return err
+	}
+	if isRevoked {
+		return nil
 	}
 
 	if delErr := s.Store.DeleteToken(ctx, accClaims.Email, accClaims.ClaimUID, ""); delErr != nil {
@@ -166,30 +186,32 @@ func (s *Service) RevokeToken(ctx context.Context, token string) error {
 	return nil
 }
 
-func (s *Service) ValidateTokens(ctx context.Context, token string) (*uuid.UUID, error) {
-	logger := ctx.Value(server.Logger).(*slog.Logger)
-
+func (s *Service) ValidateTokens(ctx *echo.Context, token string) (*uuid.UUID, error) {
 	if strings.TrimSpace(token) == "" {
-		logger.LogAttrs(ctx, slog.LevelError, "nil token for validation")
 		return nil, errors.New("nil token found")
 	}
 
 	accClaim, err := ParseToken(token, "access")
 	if err != nil {
-		logger.LogAttrs(ctx, slog.LevelError, "error while parsing access token", slog.String("error", err.Error()))
 		return nil, err
 	}
 
-	sub := accClaim.RegisteredClaims.Subject
+	// Check if token has been revoked
+	isRevoked, err := s.Store.IsTokenRevoked(ctx, accClaim.ClaimUID)
+	if err != nil {
+		return nil, err
+	}
+	if isRevoked {
+		return nil, models.ErrTokenRevoked
+	}
+
+	sub := accClaim.Subject
 	if sub == "" {
-		logger.LogAttrs(ctx, slog.LevelError, "empty userID in claim")
 		return nil, errors.New("empty user id")
 	}
 
 	uid, err := uuid.Parse(sub)
 	if err != nil {
-		logger.LogAttrs(ctx, slog.LevelError, "error while parsing claim subject",
-			slog.String("error", err.Error()))
 		return nil, err
 	}
 
