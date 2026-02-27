@@ -2,8 +2,6 @@ FROM golang:1.24-alpine AS builder
 WORKDIR /auth-rest-api
 
 COPY internal/ ./internal
-COPY "cmd/" "./cmd"
-COPY openapi/ ./openapi
 COPY go.mod go.sum main.go ./
 
 RUN go mod download

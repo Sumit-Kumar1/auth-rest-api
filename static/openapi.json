@@ -1,0 +1,525 @@
+{
+    "openapi": "3.0.2",
+    "info": {
+        "title": "auth-rest-api",
+        "description": "This is a basic JWT based auth API which supports user - signIn, signUp and refresh of user token.",
+        "version": "1.0.0"
+    },
+    "servers": [
+        {
+            "url": "http://localhost:9001"
+        }
+    ],
+    "paths": {
+        "/health": {
+            "get": {
+                "tags": [
+                    "api"
+                ],
+                "summary": "health status for service",
+                "responses": {
+                    "200": {
+                        "description": "successfully fetch api health",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/healthUp"
+                                }
+                            }
+                        }
+                    },
+                    "503": {
+                        "description": "application is not down",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "dbStatus": {
+                                            "type": "string",
+                                            "example": "down"
+                                        },
+                                        "status": {
+                                            "type": "string",
+                                            "example": "down"
+                                        },
+                                        "statusCode": {
+                                            "type": "integer",
+                                            "example": 500
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/signup": {
+            "post": {
+                "tags": [
+                    "User"
+                ],
+                "summary": "enable user to register",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/User"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "user created successfully"
+                    },
+                    "404": {
+                        "description": "Bad Request",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "code": {
+                                            "type": "integer",
+                                            "example": 404
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Unable to signup - invalid password"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "Status Conflict",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "code": {
+                                            "type": "integer",
+                                            "example": 409
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "user already exist - sumit@kumar.com"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "internal server error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "code": {
+                                            "type": "integer",
+                                            "example": 500
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Not able to unmarshall body"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/signin": {
+            "post": {
+                "tags": [
+                    "User"
+                ],
+                "summary": "enable user to login and generate tokens",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/User"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "user login successfully",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/SignResp"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "bad request",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "code": {
+                                            "type": "integer",
+                                            "example": 404
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "unable to signIn - invalid email"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "internal server error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "code": {
+                                            "type": "integer",
+                                            "example": 500
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Not able to unmarshall body"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/validate": {
+            "post": {
+                "tags": [
+                    "User"
+                ],
+                "summary": "Validate access token and return user ID",
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "in": "header",
+                        "name": "Authorization",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "example": "Bearer <JWT_token>"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Token is valid",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "string",
+                                            "description": "User ID (UUID)",
+                                            "example": "550e8400-e29b-41d4-a716-446655440000"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Missing Authorization header",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "code": {
+                                            "type": "integer",
+                                            "example": 400
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Missing Authorization header"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Invalid, expired, or revoked token",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "code": {
+                                            "type": "integer",
+                                            "example": 401
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Invalid token"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/refresh": {
+            "post": {
+                "tags": [
+                    "User"
+                ],
+                "summary": "enable user to login and generate tokens",
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "in": "header",
+                        "name": "Authorization",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "example": "Bearer <JWT_token>"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/refreshTokenReq"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "user login successfully",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/refreshTokenResp"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "bad request",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "code": {
+                                            "type": "integer",
+                                            "example": 401
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Invalid token"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "internal server error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "code": {
+                                            "type": "integer",
+                                            "example": 500
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Not able to unmarshall body"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/revoke": {
+            "post": {
+                "tags": [
+                    "User"
+                ],
+                "summary": "enable user to login and generate tokens",
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "in": "header",
+                        "name": "Authorization",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "example": "Bearer <JWT_token>"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "token revoked successfully"
+                    },
+                    "401": {
+                        "description": "token invalid or expired",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "code": {
+                                            "type": "integer",
+                                            "example": 501
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Invalid access token"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "internal server error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "code": {
+                                            "type": "integer",
+                                            "example": 500
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Failed to revoke token"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "components": {
+        "schemas": {
+            "User": {
+                "type": "object",
+                "properties": {
+                    "email": {
+                        "type": "string",
+                        "description": "a valid user email address",
+                        "example": "sumit@kumar.com"
+                    },
+                    "password": {
+                        "type": "string",
+                        "description": "password must be at least 8 characters and contain uppercase, lowercase, number, and special character",
+                        "example": "Sumit@Kumar123"
+                    }
+                },
+                "required": [
+                    "email",
+                    "password"
+                ]
+            },
+            "SignResp": {
+                "type": "object",
+                "properties": {
+                    "email": {
+                        "type": "string",
+                        "example": "sumit@kumar.com"
+                    },
+                    "accessToken": {
+                        "type": "string",
+                        "example": "<some_JWT_token>"
+                    },
+                    "refreshToken": {
+                        "type": "string",
+                        "example": "<some_JWT_token>"
+                    }
+                }
+            },
+            "healthUp": {
+                "type": "object",
+                "properties": {
+                    "dbStatus": {
+                        "example": "up",
+                        "type": "string"
+                    },
+                    "status": {
+                        "type": "string",
+                        "example": "up"
+                    },
+                    "statusCode": {
+                        "type": "integer",
+                        "example": 200
+                    }
+                }
+            },
+            "refreshTokenReq": {
+                "type": "object",
+                "properties": {
+                    "refreshToken": {
+                        "type": "string",
+                        "description": "refresh token",
+                        "example": "<some_JWT_token>"
+                    }
+                }
+            },
+            "refreshTokenResp": {
+                "type": "object",
+                "properties": {
+                    "accessToken": {
+                        "type": "string",
+                        "example": "<some_JWT_token>"
+                    },
+                    "refreshToken": {
+                        "type": "string",
+                        "example": "<some_JWT_token>"
+                    }
+                }
+            }
+        },
+        "securitySchemes": {
+            "bearerAuth": {
+                "type": "http",
+                "scheme": "bearer",
+                "bearerFormat": "JWT"
+            }
+        }
+    }
+}

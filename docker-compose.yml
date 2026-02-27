@@ -20,6 +20,8 @@ services:
       - DB_PORT=6379
       - DB_NAME=0
       - LOG_LEVEL=DEBUG
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
+      - OTEL_SERVICE_NAME=auth-rest-api
     depends_on:
       auth-db:
         condition: service_healthy
@@ -47,13 +49,12 @@ services:
       timeout: 3s
       retries: 5
 networks:
-  backend_auth_bridge:
-    #shared manually created bridge
-    external: true
+  # backend_auth_bridge:
+  #   #shared manually created bridge
+  #   external: true
   auth_db_net:
-    # internal for auth and db comms
     driver: bridge
-    internal: true
+    # internal: true
 
 volumes:
   redis-data:
