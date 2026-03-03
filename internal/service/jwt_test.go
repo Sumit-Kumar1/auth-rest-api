@@ -76,7 +76,7 @@ func TestParseToken(t *testing.T) {
 	accessKey, refKey, err := getJWTSecrets()
 	assert.NoError(t, err)
 
-	accClaims := Claims{
+	accClaims := models.Claims{
 		Email:    email,
 		ClaimUID: accID,
 		RegisteredClaims: jwt.RegisteredClaims{
@@ -89,7 +89,7 @@ func TestParseToken(t *testing.T) {
 		},
 	}
 
-	refClaims := Claims{
+	refClaims := models.Claims{
 		Email:    email,
 		ClaimUID: refID,
 		RegisteredClaims: jwt.RegisteredClaims{
@@ -113,7 +113,7 @@ func TestParseToken(t *testing.T) {
 		name      string
 		token     string
 		tokenType string
-		want      *Claims
+		want      *models.Claims
 		wantErr   error
 	}{
 		{

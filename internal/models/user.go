@@ -6,6 +6,10 @@ import (
 	"unicode"
 )
 
+type CtxKey string
+
+var CtxClaimKey CtxKey = "claims"
+
 // UserReq represents the request payload for user-related operations.
 // It contains the basic user information required for authentication.
 type UserReq struct {

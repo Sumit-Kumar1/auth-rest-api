@@ -82,7 +82,7 @@ func TestHandler_SignUp(t *testing.T) {
 			rec := httptest.NewRecorder()
 			c := e.NewContext(req, rec)
 
-			_ = h.SignUp(c)
+			_, _ = h.SignUp(c)
 
 			assert.Equalf(t, tt.expCode, rec.Code, "TEST[%d] Failed - %s", i, tt.name)
 		})

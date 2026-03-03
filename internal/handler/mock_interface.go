@@ -14,8 +14,8 @@ import (
 	reflect "reflect"
 
 	uuid "github.com/google/uuid"
-	echo "github.com/labstack/echo/v5"
 	gomock "go.uber.org/mock/gomock"
+	gofr "gofr.dev/pkg/gofr"
 )
 
 // MockServicer is a mock of Servicer interface.
@@ -43,22 +43,22 @@ func (m *MockServicer) EXPECT() *MockServicerMockRecorder {
 }
 
 // RefreshToken mocks base method.
-func (m *MockServicer) RefreshToken(ctx *echo.Context, accToken, refToken string) (*models.TokenResponse, error) {
+func (m *MockServicer) RefreshToken(ctx *gofr.Context, accClaim *models.Claims, refToken string) (*models.TokenResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RefreshToken", ctx, accToken, refToken)
+	ret := m.ctrl.Call(m, "RefreshToken", ctx, accClaim, refToken)
 	ret0, _ := ret[0].(*models.TokenResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // RefreshToken indicates an expected call of RefreshToken.
-func (mr *MockServicerMockRecorder) RefreshToken(ctx, accToken, refToken any) *gomock.Call {
+func (mr *MockServicerMockRecorder) RefreshToken(ctx, accClaim, refToken any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RefreshToken", reflect.TypeOf((*MockServicer)(nil).RefreshToken), ctx, accToken, refToken)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RefreshToken", reflect.TypeOf((*MockServicer)(nil).RefreshToken), ctx, accClaim, refToken)
 }
 
 // RevokeToken mocks base method.
-func (m *MockServicer) RevokeToken(ctx *echo.Context, accToken string) error {
+func (m *MockServicer) RevokeToken(ctx *gofr.Context, accToken *models.Claims) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RevokeToken", ctx, accToken)
 	ret0, _ := ret[0].(error)
@@ -72,7 +72,7 @@ func (mr *MockServicerMockRecorder) RevokeToken(ctx, accToken any) *gomock.Call 
 }
 
 // SignIn mocks base method.
-func (m *MockServicer) SignIn(ctx *echo.Context, user *models.UserReq) (*models.TokenResponse, error) {
+func (m *MockServicer) SignIn(ctx *gofr.Context, user *models.UserReq) (*models.TokenResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SignIn", ctx, user)
 	ret0, _ := ret[0].(*models.TokenResponse)
@@ -87,7 +87,7 @@ func (mr *MockServicerMockRecorder) SignIn(ctx, user any) *gomock.Call {
 }
 
 // SignUp mocks base method.
-func (m *MockServicer) SignUp(ctx *echo.Context, user *models.UserReq) error {
+func (m *MockServicer) SignUp(ctx *gofr.Context, user *models.UserReq) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SignUp", ctx, user)
 	ret0, _ := ret[0].(error)
@@ -101,7 +101,7 @@ func (mr *MockServicerMockRecorder) SignUp(ctx, user any) *gomock.Call {
 }
 
 // ValidateTokens mocks base method.
-func (m *MockServicer) ValidateTokens(ctx *echo.Context, token string) (*uuid.UUID, error) {
+func (m *MockServicer) ValidateTokens(ctx *gofr.Context, token *models.Claims) (*uuid.UUID, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ValidateTokens", ctx, token)
 	ret0, _ := ret[0].(*uuid.UUID)

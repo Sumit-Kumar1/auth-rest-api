@@ -5,18 +5,14 @@ import (
 	"net/http"
 )
 
-// Sentinel errors — compare with errors.Is(err, models.ErrXxx).
 var (
-	// Infrastructure
-	ErrDBNotConnected = errors.New("database not connected")
-
 	// Authentication
 	ErrUnauthorized     = errors.New("unauthorized")
 	ErrPasswordMismatch = errors.New("password does not match")
 	ErrAccountLocked    = errors.New("account is temporarily locked")
 
 	// Token
-	ErrTokenRevoked    = errors.New("token is revoked")
+	ErrTokenRevoked     = errors.New("token is revoked")
 	ErrInvalidTokenType = errors.New("invalid token type")
 
 	// User

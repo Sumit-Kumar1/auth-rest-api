@@ -11,10 +11,10 @@ package service
 
 import (
 	models "auth-rest-api/internal/models"
-	context "context"
 	reflect "reflect"
 
 	gomock "go.uber.org/mock/gomock"
+	gofr "gofr.dev/pkg/gofr"
 )
 
 // MockStorer is a mock of Storer interface.
@@ -42,7 +42,7 @@ func (m *MockStorer) EXPECT() *MockStorerMockRecorder {
 }
 
 // CreateToken mocks base method.
-func (m *MockStorer) CreateToken(ctx context.Context, email string, td *models.TokenData) error {
+func (m *MockStorer) CreateToken(ctx *gofr.Context, email string, td *models.TokenData) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CreateToken", ctx, email, td)
 	ret0, _ := ret[0].(error)
@@ -56,7 +56,7 @@ func (mr *MockStorerMockRecorder) CreateToken(ctx, email, td any) *gomock.Call {
 }
 
 // CreateUser mocks base method.
-func (m *MockStorer) CreateUser(ctx context.Context, u *models.UserData) error {
+func (m *MockStorer) CreateUser(ctx *gofr.Context, u *models.UserData) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CreateUser", ctx, u)
 	ret0, _ := ret[0].(error)
@@ -70,7 +70,7 @@ func (mr *MockStorerMockRecorder) CreateUser(ctx, u any) *gomock.Call {
 }
 
 // DeleteToken mocks base method.
-func (m *MockStorer) DeleteToken(ctx context.Context, email, accTokenID, refTokenID string) error {
+func (m *MockStorer) DeleteToken(ctx *gofr.Context, email, accTokenID, refTokenID string) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "DeleteToken", ctx, email, accTokenID, refTokenID)
 	ret0, _ := ret[0].(error)
@@ -84,7 +84,7 @@ func (mr *MockStorerMockRecorder) DeleteToken(ctx, email, accTokenID, refTokenID
 }
 
 // GetUserByEmail mocks base method.
-func (m *MockStorer) GetUserByEmail(ctx context.Context, email string) (*models.UserData, error) {
+func (m *MockStorer) GetUserByEmail(ctx *gofr.Context, email string) (*models.UserData, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetUserByEmail", ctx, email)
 	ret0, _ := ret[0].(*models.UserData)
@@ -98,8 +98,38 @@ func (mr *MockStorerMockRecorder) GetUserByEmail(ctx, email any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetUserByEmail", reflect.TypeOf((*MockStorer)(nil).GetUserByEmail), ctx, email)
 }
 
+// IncrementFailedLogin mocks base method.
+func (m *MockStorer) IncrementFailedLogin(ctx *gofr.Context, email string) (int, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IncrementFailedLogin", ctx, email)
+	ret0, _ := ret[0].(int)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// IncrementFailedLogin indicates an expected call of IncrementFailedLogin.
+func (mr *MockStorerMockRecorder) IncrementFailedLogin(ctx, email any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IncrementFailedLogin", reflect.TypeOf((*MockStorer)(nil).IncrementFailedLogin), ctx, email)
+}
+
+// IsAccountLocked mocks base method.
+func (m *MockStorer) IsAccountLocked(ctx *gofr.Context, email string) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IsAccountLocked", ctx, email)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// IsAccountLocked indicates an expected call of IsAccountLocked.
+func (mr *MockStorerMockRecorder) IsAccountLocked(ctx, email any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsAccountLocked", reflect.TypeOf((*MockStorer)(nil).IsAccountLocked), ctx, email)
+}
+
 // IsTokenRevoked mocks base method.
-func (m *MockStorer) IsTokenRevoked(ctx context.Context, tokenID string) (bool, error) {
+func (m *MockStorer) IsTokenRevoked(ctx *gofr.Context, tokenID string) (bool, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "IsTokenRevoked", ctx, tokenID)
 	ret0, _ := ret[0].(bool)
@@ -111,4 +141,18 @@ func (m *MockStorer) IsTokenRevoked(ctx context.Context, tokenID string) (bool, 
 func (mr *MockStorerMockRecorder) IsTokenRevoked(ctx, tokenID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsTokenRevoked", reflect.TypeOf((*MockStorer)(nil).IsTokenRevoked), ctx, tokenID)
+}
+
+// ResetFailedLogin mocks base method.
+func (m *MockStorer) ResetFailedLogin(ctx *gofr.Context, email string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ResetFailedLogin", ctx, email)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ResetFailedLogin indicates an expected call of ResetFailedLogin.
+func (mr *MockStorerMockRecorder) ResetFailedLogin(ctx, email any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ResetFailedLogin", reflect.TypeOf((*MockStorer)(nil).ResetFailedLogin), ctx, email)
 }
