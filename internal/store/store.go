@@ -9,6 +9,7 @@ import (
 
 	"github.com/redis/go-redis/v9"
 	"gofr.dev/pkg/gofr"
+	gofrHTTP "gofr.dev/pkg/gofr/http"
 )
 
 const (
@@ -36,7 +37,7 @@ func (s *Store) CreateUser(c *gofr.Context, user *models.UserData) error {
 	// Store email → user_id mapping, this helps in getEmail calls
 	if err := c.Redis.Set(c.Context, emaild+user.Email, user.ID, 0).Err(); err != nil {
 		if errors.Is(err, redis.Nil) {
-			return models.ErrUserAlreadyExists
+			return gofrHTTP.ErrorEntityAlreadyExist{}
 		}
 
 		return err
@@ -46,7 +47,7 @@ func (s *Store) CreateUser(c *gofr.Context, user *models.UserData) error {
 	if err := c.Redis.HSet(c.Context, userd+user.ID, map[string]any{
 		"id": user.ID, "email": user.Email, "password": user.Password}).Err(); err != nil {
 		if errors.Is(err, redis.Nil) {
-			return models.ErrUserAlreadyExists
+			return gofrHTTP.ErrorEntityAlreadyExist{}
 		}
 
 		return err
@@ -59,7 +60,7 @@ func (s *Store) CreateUser(c *gofr.Context, user *models.UserData) error {
 func (s *Store) GetUserByEmail(c *gofr.Context, userEmail string) (*models.UserData, error) {
 	userID, err := c.Redis.Get(c.Context, emaild+userEmail).Result()
 	if errors.Is(err, redis.Nil) {
-		return nil, models.ErrUserNotFound
+		return nil, gofrHTTP.ErrorEntityNotFound{Name: "user", Value: userEmail}
 	} else if err != nil {
 		return nil, err
 	}
@@ -70,7 +71,7 @@ func (s *Store) GetUserByEmail(c *gofr.Context, userEmail string) (*models.UserD
 	}
 
 	if len(data) == 0 {
-		return nil, models.ErrUserNotFound
+		return nil, gofrHTTP.ErrorEntityNotFound{Name: "user", Value: userEmail}
 	}
 
 	return &models.UserData{ID: data["id"], Email: data["email"], Password: []byte(data["password"])}, nil

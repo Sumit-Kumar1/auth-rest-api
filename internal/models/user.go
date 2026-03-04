@@ -4,6 +4,8 @@ import (
 	"regexp"
 	"strings"
 	"unicode"
+
+	gofrHTTP "gofr.dev/pkg/gofr/http"
 )
 
 type CtxKey string
@@ -60,11 +62,11 @@ func ValidateEmail(email string) error {
 	emailRegex := regexp.MustCompile(`^[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,4}$`)
 
 	if email == "" {
-		return ErrEmailRequired
+		return gofrHTTP.ErrorMissingParam{Params: []string{"email"}}
 	}
 
 	if !emailRegex.MatchString(email) {
-		return ErrEmailInvalid
+		return gofrHTTP.ErrorInvalidParam{Params: []string{"email"}}
 	}
 
 	return nil
@@ -80,11 +82,11 @@ func validatePassword(password string) error {
 	)
 
 	if passwd == "" {
-		return ErrPasswordRequired
+		return gofrHTTP.ErrorMissingParam{Params: []string{"password"}}
 	}
 
 	if len(passwd) < 8 {
-		return ErrPasswordTooShort
+		return gofrHTTP.ErrorInvalidParam{Params: []string{"password must be at least 8 characters"}}
 	}
 
 	for _, char := range passwd {
@@ -101,19 +103,19 @@ func validatePassword(password string) error {
 	}
 
 	if !hasUpper {
-		return ErrPasswordNoUpper
+		return gofrHTTP.ErrorInvalidParam{Params: []string{"password must contain at least one uppercase letter"}}
 	}
 
 	if !hasLower {
-		return ErrPasswordNoLower
+		return gofrHTTP.ErrorInvalidParam{Params: []string{"password must contain at least one lowercase letter"}}
 	}
 
 	if !hasNumber {
-		return ErrPasswordNoNumber
+		return gofrHTTP.ErrorInvalidParam{Params: []string{"password must contain at least one number"}}
 	}
 
 	if !hasSpecial {
-		return ErrPasswordNoSpecial
+		return gofrHTTP.ErrorInvalidParam{Params: []string{"password must contain at least one special character"}}
 	}
 
 	return nil

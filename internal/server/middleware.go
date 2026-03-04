@@ -22,7 +22,7 @@ func AuthMiddleware() gofrHTTP.Middleware {
 				claims, err := validate(r.Header.Get("Authorization"))
 				if err != nil {
 					w.WriteHeader(http.StatusUnauthorized)
-					w.Write(json.RawMessage(`unauthorized access`))
+					w.Write(json.RawMessage(`unauthorized access, ` + err.Error()))
 					return
 				}
 

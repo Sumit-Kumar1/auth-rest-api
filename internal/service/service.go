@@ -42,20 +42,20 @@ func New(s Storer) *Service {
 
 func (s *Service) SignUp(ctx *gofr.Context, user *models.UserReq) error {
 	if user == nil {
-		return models.ErrBadRequest(models.ErrInvalidInput)
+		return gofrHTTP.ErrorMissingParam{Params: []string{"email", "password"}}
 	}
 
 	if err := user.Validate(); err != nil {
-		return models.ErrBadRequest(err)
+		return err
 	}
 
 	exUser, err := s.Store.GetUserByEmail(ctx, user.Email)
-	if err != nil && !errors.Is(err, models.ErrUserNotFound) {
+	if err != nil && !errors.Is(err, gofrHTTP.ErrorEntityNotFound{}) {
 		return err
 	}
 
 	if exUser != nil {
-		return models.ErrUserAlreadyExists
+		return gofrHTTP.ErrorEntityAlreadyExist{}
 	}
 
 	hash, err := bcrypt.GenerateFromPassword([]byte(user.Password), 10)
@@ -78,11 +78,11 @@ func (s *Service) SignUp(ctx *gofr.Context, user *models.UserReq) error {
 
 func (s *Service) SignIn(ctx *gofr.Context, user *models.UserReq) (*models.TokenResponse, error) {
 	if user == nil {
-		return nil, models.ErrBadRequest(models.ErrInvalidInput)
+		return nil, gofrHTTP.ErrorMissingParam{Params: []string{"email", "password"}}
 	}
 
 	if valErr := user.Validate(); valErr != nil {
-		return nil, models.ErrBadRequest(valErr)
+		return nil, valErr
 	}
 
 	// Check if account is locked due to too many failed login attempts
