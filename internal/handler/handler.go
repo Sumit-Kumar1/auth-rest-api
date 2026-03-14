@@ -41,18 +41,7 @@ func (h *Handler) SignUp(c *gofr.Context) (any, error) {
 	}
 
 	if err := h.Service.SignUp(c, &u); err != nil {
-		switch {
-		case errors.Is(err, models.ErrUserAlreadyExists):
-			return nil, err
-
-		default:
-			var httpErr *models.HTTPError
-			if errors.As(err, &httpErr) {
-				return nil, err
-			}
-
-			return nil, err
-		}
+		return nil, err
 	}
 
 	return "user created successfully", nil
@@ -68,11 +57,6 @@ func (h *Handler) SignIn(c *gofr.Context) (any, error) {
 
 	tokenResp, err := h.Service.SignIn(c, &u)
 	if err != nil {
-		var httpErr *models.HTTPError
-		if errors.As(err, &httpErr) {
-			return nil, err
-		}
-
 		// All auth failures return generic 401 to prevent user enumeration
 		return nil, err
 	}

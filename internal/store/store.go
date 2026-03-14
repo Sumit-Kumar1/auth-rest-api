@@ -59,9 +59,11 @@ func (s *Store) CreateUser(c *gofr.Context, user *models.UserData) error {
 // GetUserByEmail retrieves a user from the database by their email.
 func (s *Store) GetUserByEmail(c *gofr.Context, userEmail string) (*models.UserData, error) {
 	userID, err := c.Redis.Get(c.Context, emaild+userEmail).Result()
-	if errors.Is(err, redis.Nil) {
-		return nil, gofrHTTP.ErrorEntityNotFound{Name: "user", Value: userEmail}
-	} else if err != nil {
+	if err != nil {
+		if errors.Is(err, redis.Nil) {
+			return nil, gofrHTTP.ErrorEntityNotFound{Name: "user", Value: userEmail}
+		}
+
 		return nil, err
 	}
 

@@ -50,7 +50,7 @@ func (s *Service) SignUp(ctx *gofr.Context, user *models.UserReq) error {
 	}
 
 	exUser, err := s.Store.GetUserByEmail(ctx, user.Email)
-	if err != nil && !errors.Is(err, gofrHTTP.ErrorEntityNotFound{}) {
+	if err != nil &&  !errors.Is(err, gofrHTTP.ErrorEntityNotFound{Name: "user", Value: user.Email}) {
 		return err
 	}
 
