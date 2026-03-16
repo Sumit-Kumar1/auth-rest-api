@@ -28,7 +28,7 @@ func AuthMiddleware() gofrHTTP.Middleware {
 
 				if claims == nil {
 					w.WriteHeader(http.StatusUnauthorized)
-					w.Write(json.RawMessage(`unauthorized access`))
+					w.Write(json.RawMessage(`unauthorized access, nil claims`))
 					return
 				}
 
@@ -55,22 +55,23 @@ func validate(authHeader string) (*models.Claims, error) {
 		return nil, err
 	}
 
-	token, err := jwt.Parse(tokenString, func(_ *jwt.Token) (any, error) {
+	token, err := jwt.ParseWithClaims(tokenString, &models.Claims{}, func(_ *jwt.Token) (any, error) {
 		return secret, nil
 	})
 	if err != nil {
-		return nil, models.ErrUnauthorized
+		return nil, err
 	}
 
-	if claims, ok := token.Claims.(*models.Claims); ok && token.Valid {
-		return claims, nil
+	claims, ok := token.Claims.(*models.Claims)
+	if !ok {
+		return nil, models.ErrInvalidTokenType
 	}
 
 	if !token.Valid {
 		return nil, jwt.ErrSignatureInvalid
 	}
 
-	return nil, err
+	return claims, nil
 }
 
 // getJWTSecret retrieves the JWT signing secret from environment variables.

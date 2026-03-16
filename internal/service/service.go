@@ -50,7 +50,7 @@ func (s *Service) SignUp(ctx *gofr.Context, user *models.UserReq) error {
 	}
 
 	exUser, err := s.Store.GetUserByEmail(ctx, user.Email)
-	if err != nil &&  !errors.Is(err, gofrHTTP.ErrorEntityNotFound{Name: "user", Value: user.Email}) {
+	if err != nil && !errors.Is(err, gofrHTTP.ErrorEntityNotFound{Name: "user", Value: user.Email}) {
 		return err
 	}
 
@@ -131,11 +131,6 @@ func (s *Service) RefreshToken(ctx *gofr.Context, accessClaim *models.Claims, re
 		return nil, gofrHTTP.ErrorMissingParam{Params: []string{"access token"}}
 	}
 
-	refreshClaim, err := s.tokenParsing(refreshToken, "refresh")
-	if err != nil {
-		return nil, err
-	}
-
 	// check if access token is revoked
 	isRevoked, err := s.Store.IsTokenRevoked(ctx, accessClaim.ClaimUID)
 	if err != nil {
@@ -144,6 +139,11 @@ func (s *Service) RefreshToken(ctx *gofr.Context, accessClaim *models.Claims, re
 
 	if isRevoked {
 		return nil, models.ErrTokenRevoked
+	}
+
+	refreshClaim, err := s.tokenParsing(refreshToken, "refresh")
+	if err != nil {
+		return nil, err
 	}
 
 	// Deleting old active tokens

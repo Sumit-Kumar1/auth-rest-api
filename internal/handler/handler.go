@@ -128,7 +128,11 @@ func (h *Handler) Validate(c *gofr.Context) (any, error) {
 		return nil, err
 	}
 
-	return userID.String(), nil
+	return struct {
+		UserID uuid.UUID `json:"userId,omitempty"`
+	}{
+		UserID: *userID,
+	}, nil
 }
 
 func extractClaimFromCtx(c *gofr.Context) (*models.Claims, error) {
