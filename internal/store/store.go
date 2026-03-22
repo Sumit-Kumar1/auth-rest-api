@@ -35,21 +35,24 @@ func New() *Store {
 // CreateUser stores a new user in the database
 func (s *Store) CreateUser(c *gofr.Context, user *models.UserData) error {
 	// Store email → user_id mapping, this helps in getEmail calls
-	if err := c.Redis.Set(c.Context, emaild+user.Email, user.ID, 0).Err(); err != nil {
-		if errors.Is(err, redis.Nil) {
-			return gofrHTTP.ErrorEntityAlreadyExist{}
-		}
+	err := c.Redis.Set(c.Context, emaild+user.Email, user.ID, 0).Err()
+	if errors.Is(err, redis.Nil) {
+		return gofrHTTP.ErrorEntityAlreadyExist{}
+	}
 
+	if err != nil {
 		return err
 	}
 
 	// store user hash data with uniqueness of userId
-	if err := c.Redis.HSet(c.Context, userd+user.ID, map[string]any{
-		"id": user.ID, "email": user.Email, "password": user.Password}).Err(); err != nil {
-		if errors.Is(err, redis.Nil) {
-			return gofrHTTP.ErrorEntityAlreadyExist{}
-		}
+	err = c.Redis.HSet(c.Context, userd+user.ID, map[string]any{
+		"id": user.ID, "email": user.Email, "password": user.Password}).Err()
 
+	if errors.Is(err, redis.Nil) {
+		return gofrHTTP.ErrorEntityAlreadyExist{}
+	}
+
+	if err != nil {
 		return err
 	}
 

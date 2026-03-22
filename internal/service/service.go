@@ -138,7 +138,7 @@ func (s *Service) RefreshToken(ctx *gofr.Context, accessClaim *models.Claims, re
 	}
 
 	if isRevoked {
-		return nil, models.ErrTokenRevoked
+		return nil, models.ErrTokenRevoked{}
 	}
 
 	refreshClaim, err := s.tokenParsing(refreshToken, "refresh")
@@ -201,12 +201,12 @@ func (s *Service) ValidateTokens(ctx *gofr.Context, accessClaim *models.Claims) 
 	}
 
 	if isRevoked {
-		return nil, models.ErrTokenRevoked
+		return nil, models.ErrTokenRevoked{}
 	}
 
 	sub := accessClaim.Subject
 	if sub == "" {
-		return nil, models.ErrInvalidTokenType
+		return nil, models.ErrInvalidToken{}
 	}
 
 	uid, err := uuid.Parse(sub)

@@ -102,7 +102,7 @@ func ParseToken(tokenString, tokenType string) (*models.Claims, error) {
 			return refSecret, nil
 		}, jwt.WithExpirationRequired(), jwt.WithStrictDecoding())
 	default:
-		return nil, models.ErrInvalidTokenType
+		return nil, models.ErrInvalidToken{}
 	}
 
 	if err != nil {
@@ -114,7 +114,7 @@ func ParseToken(tokenString, tokenType string) (*models.Claims, error) {
 	}
 
 	if !token.Valid {
-		return nil, jwt.ErrSignatureInvalid
+		return nil, models.ErrInvalidToken{}
 	}
 
 	return nil, err

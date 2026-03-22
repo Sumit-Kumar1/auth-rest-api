@@ -89,7 +89,7 @@ func (h *Handler) RefreshToken(c *gofr.Context) (any, error) {
 
 	tokenResp, err := h.Service.RefreshToken(c, accessClaim, body.Token)
 	if err != nil {
-		if errors.Is(err, models.ErrTokenRevoked) || errors.Is(err, models.ErrUnauthorized) {
+		if errors.Is(err, models.ErrTokenRevoked{}) || errors.Is(err, models.ErrUnAuthorized{}) {
 			return nil, err
 		}
 

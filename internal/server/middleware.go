@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"os"
@@ -17,18 +16,13 @@ import (
 func AuthMiddleware() gofrHTTP.Middleware {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			respWriter := gofrHTTP.NewResponder(w, http.MethodPost)
+
 			switch r.URL.Path {
 			case "/validate", "/refresh", "/revoke":
 				claims, err := validate(r.Header.Get("Authorization"))
-				if err != nil {
-					w.WriteHeader(http.StatusUnauthorized)
-					w.Write(json.RawMessage(`unauthorized access, ` + err.Error()))
-					return
-				}
-
-				if claims == nil {
-					w.WriteHeader(http.StatusUnauthorized)
-					w.Write(json.RawMessage(`unauthorized access, nil claims`))
+				if err != nil || claims == nil {
+					respWriter.Respond(nil, models.ErrInvalidToken{})
 					return
 				}
 
@@ -45,7 +39,7 @@ func AuthMiddleware() gofrHTTP.Middleware {
 
 func validate(authHeader string) (*models.Claims, error) {
 	if strings.TrimSpace(authHeader) == "" {
-		return nil, models.ErrUnauthorized
+		return nil, models.ErrUnAuthorized{}
 	}
 
 	tokenString := strings.TrimPrefix(authHeader, "Bearer ")
@@ -64,11 +58,11 @@ func validate(authHeader string) (*models.Claims, error) {
 
 	claims, ok := token.Claims.(*models.Claims)
 	if !ok {
-		return nil, models.ErrInvalidTokenType
+		return nil, models.ErrInvalidToken{}
 	}
 
 	if !token.Valid {
-		return nil, jwt.ErrSignatureInvalid
+		return nil, models.ErrInvalidToken{}
 	}
 
 	return claims, nil

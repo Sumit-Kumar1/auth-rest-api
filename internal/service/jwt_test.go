@@ -129,7 +129,7 @@ func TestParseToken(t *testing.T) {
 		{
 			name:  "invalid token type",
 			token: valRefToken, tokenType: "ref",
-			wantErr: models.ErrInvalidTokenType,
+			wantErr: models.ErrInvalidToken{},
 		},
 		{
 			name: "invalid token",
