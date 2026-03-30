@@ -92,7 +92,7 @@ func (s *Service) SignIn(ctx *gofr.Context, user *models.UserReq) (*models.Token
 	}
 
 	if isLocked {
-		return nil, models.ErrAccountLocked
+		return nil, models.ErrAccountLocked{}
 	}
 
 	exUser, err := s.Store.GetUserByEmail(ctx, user.Email)
@@ -105,7 +105,7 @@ func (s *Service) SignIn(ctx *gofr.Context, user *models.UserReq) (*models.Token
 	if err = bcrypt.CompareHashAndPassword(exUser.Password, []byte(user.Password)); err != nil {
 		// Increment failed login counter on password mismatch
 		s.Store.IncrementFailedLogin(ctx, user.Email)
-		return nil, models.ErrPasswordMismatch
+		return nil, models.ErrPasswordMismatch{}
 	}
 
 	// Reset failed login counter on successful login
