@@ -4,6 +4,25 @@ import (
 	"regexp"
 	"strings"
 	"unicode"
+
+	gofrHTTP "gofr.dev/pkg/gofr/http"
+)
+
+const (
+	emailStr       = "email"
+	passwd         = "password"
+	passwdLenErr   = "password must be at least 8 characters"
+	upperCaseErr   = "password must contain at least one uppercase letter"
+	lowerCaseErr   = "password must contain at least one lowercase letter"
+	numberErr      = "password must contain at least one number"
+	specialCharErr = "password must contain at least one special character"
+)
+
+type CtxKey string
+
+var (
+	CtxClaimKey CtxKey = "claims"
+	emailRegExp        = regexp.MustCompile(`^[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,4}$`)
 )
 
 // UserReq represents the request payload for user-related operations.
@@ -53,14 +72,13 @@ func (u *UserReq) Validate() error {
 // Returns an error if the email is invalid.
 func ValidateEmail(email string) error {
 	email = strings.ToLower(strings.TrimSpace(email))
-	emailRegex := regexp.MustCompile(`^[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,4}$`)
 
 	if email == "" {
-		return ErrEmailRequired
+		return gofrHTTP.ErrorMissingParam{Params: []string{emailStr}}
 	}
 
-	if !emailRegex.MatchString(email) {
-		return ErrEmailInvalid
+	if !emailRegExp.MatchString(email) {
+		return gofrHTTP.ErrorInvalidParam{Params: []string{emailStr}}
 	}
 
 	return nil
@@ -68,22 +86,22 @@ func ValidateEmail(email string) error {
 
 func validatePassword(password string) error {
 	var (
-		hasUpper   = false
-		hasLower   = false
-		hasNumber  = false
-		hasSpecial = false
-		passwd     = strings.TrimSpace(password)
+		hasUpper    = false
+		hasLower    = false
+		hasNumber   = false
+		hasSpecial  = false
+		trimmedPass = strings.TrimSpace(password)
 	)
 
-	if passwd == "" {
-		return ErrPasswordRequired
+	if trimmedPass == "" {
+		return gofrHTTP.ErrorMissingParam{Params: []string{passwd}}
 	}
 
-	if len(passwd) < 8 {
-		return ErrPasswordTooShort
+	if len(trimmedPass) < 8 {
+		return gofrHTTP.ErrorInvalidParam{Params: []string{passwdLenErr}}
 	}
 
-	for _, char := range passwd {
+	for _, char := range trimmedPass {
 		switch {
 		case unicode.IsUpper(char):
 			hasUpper = true
@@ -97,19 +115,19 @@ func validatePassword(password string) error {
 	}
 
 	if !hasUpper {
-		return ErrPasswordNoUpper
+		return gofrHTTP.ErrorInvalidParam{Params: []string{upperCaseErr}}
 	}
 
 	if !hasLower {
-		return ErrPasswordNoLower
+		return gofrHTTP.ErrorInvalidParam{Params: []string{lowerCaseErr}}
 	}
 
 	if !hasNumber {
-		return ErrPasswordNoNumber
+		return gofrHTTP.ErrorInvalidParam{Params: []string{numberErr}}
 	}
 
 	if !hasSpecial {
-		return ErrPasswordNoSpecial
+		return gofrHTTP.ErrorInvalidParam{Params: []string{specialCharErr}}
 	}
 
 	return nil

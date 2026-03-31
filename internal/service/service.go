@@ -2,12 +2,12 @@ package service
 
 import (
 	"errors"
-	"strings"
 
 	"auth-rest-api/internal/models"
 
 	"github.com/google/uuid"
-	"github.com/labstack/echo/v5"
+	"gofr.dev/pkg/gofr"
+	gofrHTTP "gofr.dev/pkg/gofr/http"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -16,16 +16,16 @@ import (
 //
 //go:generate mockgen -source=service.go -destination=mock_interface.go -package=service
 type Storer interface {
-	CreateUser(ctx *echo.Context, u *models.UserData) error
-	GetUserByEmail(ctx *echo.Context, email string) (*models.UserData, error)
+	CreateUser(ctx *gofr.Context, u *models.UserData) error
+	GetUserByEmail(ctx *gofr.Context, email string) (*models.UserData, error)
 
-	IsTokenRevoked(ctx *echo.Context, tokenID string) (bool, error)
-	CreateToken(ctx *echo.Context, email string, td *models.TokenData) error
-	DeleteToken(ctx *echo.Context, email, accTokenID, refTokenID string) error
+	IsTokenRevoked(ctx *gofr.Context, tokenID string) (bool, error)
+	CreateToken(ctx *gofr.Context, email string, td *models.TokenData) error
+	DeleteToken(ctx *gofr.Context, email, accTokenID, refTokenID string) error
 
-	IncrementFailedLogin(ctx *echo.Context, email string) (int, error)
-	ResetFailedLogin(ctx *echo.Context, email string) error
-	IsAccountLocked(ctx *echo.Context, email string) (bool, error)
+	IncrementFailedLogin(ctx *gofr.Context, email string) (int, error)
+	ResetFailedLogin(ctx *gofr.Context, email string) error
+	IsAccountLocked(ctx *gofr.Context, email string) (bool, error)
 }
 
 // Service represents the core business logic layer.
@@ -40,22 +40,22 @@ func New(s Storer) *Service {
 	return &Service{Store: s}
 }
 
-func (s *Service) SignUp(ctx *echo.Context, user *models.UserReq) error {
+func (s *Service) SignUp(ctx *gofr.Context, user *models.UserReq) error {
 	if user == nil {
-		return models.ErrBadRequest(models.ErrInvalidInput)
+		return gofrHTTP.ErrorMissingParam{Params: []string{"email", "password"}}
 	}
 
 	if err := user.Validate(); err != nil {
-		return models.ErrBadRequest(err)
+		return err
 	}
 
 	exUser, err := s.Store.GetUserByEmail(ctx, user.Email)
-	if err != nil && !errors.Is(err, models.ErrUserNotFound) {
+	if err != nil && !errors.Is(err, gofrHTTP.ErrorEntityNotFound{Name: "user", Value: user.Email}) {
 		return err
 	}
 
 	if exUser != nil {
-		return models.ErrUserAlreadyExists
+		return gofrHTTP.ErrorEntityAlreadyExist{}
 	}
 
 	hash, err := bcrypt.GenerateFromPassword([]byte(user.Password), 10)
@@ -76,13 +76,13 @@ func (s *Service) SignUp(ctx *echo.Context, user *models.UserReq) error {
 	return nil
 }
 
-func (s *Service) SignIn(ctx *echo.Context, user *models.UserReq) (*models.TokenResponse, error) {
+func (s *Service) SignIn(ctx *gofr.Context, user *models.UserReq) (*models.TokenResponse, error) {
 	if user == nil {
-		return nil, models.ErrBadRequest(models.ErrInvalidInput)
+		return nil, gofrHTTP.ErrorMissingParam{Params: []string{"email", "password"}}
 	}
 
 	if valErr := user.Validate(); valErr != nil {
-		return nil, models.ErrBadRequest(valErr)
+		return nil, valErr
 	}
 
 	// Check if account is locked due to too many failed login attempts
@@ -92,7 +92,7 @@ func (s *Service) SignIn(ctx *echo.Context, user *models.UserReq) (*models.Token
 	}
 
 	if isLocked {
-		return nil, models.ErrAccountLocked
+		return nil, models.ErrAccountLocked{}
 	}
 
 	exUser, err := s.Store.GetUserByEmail(ctx, user.Email)
@@ -105,7 +105,7 @@ func (s *Service) SignIn(ctx *echo.Context, user *models.UserReq) (*models.Token
 	if err = bcrypt.CompareHashAndPassword(exUser.Password, []byte(user.Password)); err != nil {
 		// Increment failed login counter on password mismatch
 		s.Store.IncrementFailedLogin(ctx, user.Email)
-		return nil, models.ErrPasswordMismatch
+		return nil, models.ErrPasswordMismatch{}
 	}
 
 	// Reset failed login counter on successful login
@@ -126,10 +126,9 @@ func (s *Service) SignIn(ctx *echo.Context, user *models.UserReq) (*models.Token
 	}, nil
 }
 
-func (s *Service) RefreshToken(ctx *echo.Context, accessToken, refreshToken string) (*models.TokenResponse, error) {
-	accessClaim, refreshClaim, err := s.tokenParsing(accessToken, refreshToken)
-	if err != nil {
-		return nil, err
+func (s *Service) RefreshToken(ctx *gofr.Context, accessClaim *models.Claims, refreshToken string) (*models.TokenResponse, error) {
+	if accessClaim == nil {
+		return nil, gofrHTTP.ErrorMissingParam{Params: []string{"access token"}}
 	}
 
 	// check if access token is revoked
@@ -139,7 +138,12 @@ func (s *Service) RefreshToken(ctx *echo.Context, accessToken, refreshToken stri
 	}
 
 	if isRevoked {
-		return nil, models.ErrTokenRevoked
+		return nil, models.ErrTokenRevoked{}
+	}
+
+	refreshClaim, err := s.tokenParsing(refreshToken, "refresh")
+	if err != nil {
+		return nil, err
 	}
 
 	// Deleting old active tokens
@@ -164,10 +168,9 @@ func (s *Service) RefreshToken(ctx *echo.Context, accessToken, refreshToken stri
 }
 
 // RevokeToken revokes the provided token, deletes stored token too
-func (s *Service) RevokeToken(ctx *echo.Context, token string) error {
-	accClaims, err := ParseToken(token, "access")
-	if err != nil {
-		return err
+func (s *Service) RevokeToken(ctx *gofr.Context, accClaims *models.Claims) error {
+	if accClaims == nil {
+		return gofrHTTP.ErrorMissingParam{Params: []string{"access token"}}
 	}
 
 	// Check if already revoked for idempotency
@@ -186,28 +189,24 @@ func (s *Service) RevokeToken(ctx *echo.Context, token string) error {
 	return nil
 }
 
-func (s *Service) ValidateTokens(ctx *echo.Context, token string) (*uuid.UUID, error) {
-	if strings.TrimSpace(token) == "" {
-		return nil, errors.New("nil token found")
-	}
-
-	accClaim, err := ParseToken(token, "access")
-	if err != nil {
-		return nil, err
+func (s *Service) ValidateTokens(ctx *gofr.Context, accessClaim *models.Claims) (*uuid.UUID, error) {
+	if accessClaim == nil {
+		return nil, gofrHTTP.ErrorMissingParam{Params: []string{"access token"}}
 	}
 
 	// Check if token has been revoked
-	isRevoked, err := s.Store.IsTokenRevoked(ctx, accClaim.ClaimUID)
+	isRevoked, err := s.Store.IsTokenRevoked(ctx, accessClaim.ClaimUID)
 	if err != nil {
 		return nil, err
 	}
+
 	if isRevoked {
-		return nil, models.ErrTokenRevoked
+		return nil, models.ErrTokenRevoked{}
 	}
 
-	sub := accClaim.Subject
+	sub := accessClaim.Subject
 	if sub == "" {
-		return nil, errors.New("empty user id")
+		return nil, models.ErrInvalidToken{}
 	}
 
 	uid, err := uuid.Parse(sub)
@@ -218,16 +217,11 @@ func (s *Service) ValidateTokens(ctx *echo.Context, token string) (*uuid.UUID, e
 	return &uid, nil
 }
 
-func (s *Service) tokenParsing(accToken, refToken string) (access, refresh *Claims, err error) {
-	access, err = ParseToken(accToken, "access")
+func (s *Service) tokenParsing(token, tokenType string) (*models.Claims, error) {
+	claim, err := ParseToken(token, tokenType)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
-	refresh, err = ParseToken(refToken, "refresh")
-	if err != nil {
-		return nil, nil, err
-	}
-
-	return
+	return claim, nil
 }
