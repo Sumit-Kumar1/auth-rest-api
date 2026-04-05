@@ -16,9 +16,13 @@ import (
 	gofrHTTP "gofr.dev/pkg/gofr/http"
 )
 
-var errRedis = errors.New("redis error")
+const (
+	testFailStr = "TEST[%d] Failed - %s"
+	redisErr    = "redis error"
+	testMail    = "test@example.com"
+)
 
-const testFailStr = "TEST[%d] Failed - %s"
+var errRedis = errors.New(redisErr)
 
 func newTestContext(t *testing.T) (*gofr.Context, *container.Mocks) {
 	t.Helper()
@@ -96,7 +100,6 @@ func boolCmdVal(val bool) *redis.BoolCmd {
 }
 
 func TestStore_CreateUser(t *testing.T) {
-	userEmail := "test@example.com"
 	userID := uuid.NewString()
 	passwd := []byte("hashedpassword")
 	s := New()
@@ -109,53 +112,53 @@ func TestStore_CreateUser(t *testing.T) {
 	}{
 		{
 			name: "success",
-			user: &models.UserData{ID: userID, Email: userEmail, Password: passwd},
+			user: &models.UserData{ID: userID, Email: testMail, Password: passwd},
 			mockCall: func(mocks *container.Mocks) {
-				mocks.Redis.EXPECT().Set(context.Background(), emaild+userEmail, userID, time.Duration(0)).
+				mocks.Redis.EXPECT().Set(context.Background(), emaild+testMail, userID, time.Duration(0)).
 					Return(statusCmdOK())
 				mocks.Redis.EXPECT().HSet(context.Background(), userd+userID,
-					map[string]any{"id": userID, "email": userEmail, "password": passwd}).
+					map[string]any{"id": userID, "email": testMail, "password": passwd}).
 					Return(intCmdVal(1))
 			},
 		},
 		{
 			name: "email set redis nil",
-			user: &models.UserData{ID: userID, Email: userEmail, Password: passwd},
+			user: &models.UserData{ID: userID, Email: testMail, Password: passwd},
 			mockCall: func(mocks *container.Mocks) {
-				mocks.Redis.EXPECT().Set(context.Background(), emaild+userEmail, userID, time.Duration(0)).
+				mocks.Redis.EXPECT().Set(context.Background(), emaild+testMail, userID, time.Duration(0)).
 					Return(statusCmdErr(redis.Nil))
 			},
 			wantErr: gofrHTTP.ErrorEntityAlreadyExist{},
 		},
 		{
 			name: "email set redis error",
-			user: &models.UserData{ID: userID, Email: userEmail, Password: passwd},
+			user: &models.UserData{ID: userID, Email: testMail, Password: passwd},
 			mockCall: func(mocks *container.Mocks) {
-				mocks.Redis.EXPECT().Set(context.Background(), emaild+userEmail, userID, time.Duration(0)).
+				mocks.Redis.EXPECT().Set(context.Background(), emaild+testMail, userID, time.Duration(0)).
 					Return(statusCmdErr(errRedis))
 			},
 			wantErr: errRedis,
 		},
 		{
 			name: "hset redis nil",
-			user: &models.UserData{ID: userID, Email: userEmail, Password: passwd},
+			user: &models.UserData{ID: userID, Email: testMail, Password: passwd},
 			mockCall: func(mocks *container.Mocks) {
-				mocks.Redis.EXPECT().Set(context.Background(), emaild+userEmail, userID, time.Duration(0)).
+				mocks.Redis.EXPECT().Set(context.Background(), emaild+testMail, userID, time.Duration(0)).
 					Return(statusCmdOK())
 				mocks.Redis.EXPECT().HSet(context.Background(), userd+userID,
-					map[string]any{"id": userID, "email": userEmail, "password": passwd}).
+					map[string]any{"id": userID, "email": testMail, "password": passwd}).
 					Return(intCmdErr(redis.Nil))
 			},
 			wantErr: gofrHTTP.ErrorEntityAlreadyExist{},
 		},
 		{
 			name: "hset redis error",
-			user: &models.UserData{ID: userID, Email: userEmail, Password: passwd},
+			user: &models.UserData{ID: userID, Email: testMail, Password: passwd},
 			mockCall: func(mocks *container.Mocks) {
-				mocks.Redis.EXPECT().Set(context.Background(), emaild+userEmail, userID, time.Duration(0)).
+				mocks.Redis.EXPECT().Set(context.Background(), emaild+testMail, userID, time.Duration(0)).
 					Return(statusCmdOK())
 				mocks.Redis.EXPECT().HSet(context.Background(), userd+userID,
-					map[string]any{"id": userID, "email": userEmail, "password": passwd}).
+					map[string]any{"id": userID, "email": testMail, "password": passwd}).
 					Return(intCmdErr(errRedis))
 			},
 			wantErr: errRedis,
@@ -174,9 +177,8 @@ func TestStore_CreateUser(t *testing.T) {
 }
 
 func TestStore_GetUserByEmail(t *testing.T) {
-	userEmail := "test@example.com"
 	userID := uuid.NewString()
-	passwd := "hashedpass"
+	pass := "hashedpass"
 	s := New()
 
 	tests := []struct {
@@ -188,43 +190,43 @@ func TestStore_GetUserByEmail(t *testing.T) {
 	}{
 		{
 			name:  "success",
-			email: userEmail,
+			email: testMail,
 			mockCall: func(mocks *container.Mocks) {
-				mocks.Redis.EXPECT().Get(context.Background(), emaild+userEmail).
+				mocks.Redis.EXPECT().Get(context.Background(), emaild+testMail).
 					Return(stringCmdVal(userID))
 				mocks.Redis.EXPECT().HGetAll(context.Background(), userd+userID).
-					Return(mapCmdVal(map[string]string{"id": userID, "email": userEmail, "password": passwd}))
+					Return(mapCmdVal(map[string]string{"id": userID, "email": testMail, "password": pass}))
 			},
-			want: &models.UserData{ID: userID, Email: userEmail, Password: []byte(passwd)},
+			want: &models.UserData{ID: userID, Email: testMail, Password: []byte(pass)},
 		},
 		{
 			name:  "email not found",
-			email: userEmail,
+			email: testMail,
 			mockCall: func(mocks *container.Mocks) {
-				mocks.Redis.EXPECT().Get(context.Background(), emaild+userEmail).
+				mocks.Redis.EXPECT().Get(context.Background(), emaild+testMail).
 					Return(stringCmdErr(redis.Nil))
 			},
-			wantErr: gofrHTTP.ErrorEntityNotFound{Name: "user", Value: userEmail},
+			wantErr: gofrHTTP.ErrorEntityNotFound{Name: "user", Value: testMail},
 		},
 		{
 			name:  "get email redis error",
-			email: userEmail,
+			email: testMail,
 			mockCall: func(mocks *container.Mocks) {
-				mocks.Redis.EXPECT().Get(context.Background(), emaild+userEmail).
+				mocks.Redis.EXPECT().Get(context.Background(), emaild+testMail).
 					Return(stringCmdErr(errRedis))
 			},
 			wantErr: errRedis,
 		},
 		{
 			name:  "hgetall redis error",
-			email: userEmail,
+			email: testMail,
 			mockCall: func(mocks *container.Mocks) {
-				mocks.Redis.EXPECT().Get(context.Background(), emaild+userEmail).
+				mocks.Redis.EXPECT().Get(context.Background(), emaild+testMail).
 					Return(stringCmdVal(userID))
 				mocks.Redis.EXPECT().HGetAll(context.Background(), userd+userID).
 					Return(mapCmdVal(map[string]string{}))
 			},
-			wantErr: gofrHTTP.ErrorEntityNotFound{Name: "user", Value: userEmail},
+			wantErr: gofrHTTP.ErrorEntityNotFound{Name: "user", Value: testMail},
 		},
 	}
 
@@ -279,7 +281,7 @@ func TestStore_IsTokenRevoked(t *testing.T) {
 			want: true,
 		},
 		{
-			name:    "redis error",
+			name:    redisErr,
 			tokenID: tokenID,
 			mockCall: func(mocks *container.Mocks) {
 				mocks.Redis.EXPECT().Exists(context.Background(), accTokend+tokenID).
@@ -303,8 +305,7 @@ func TestStore_IsTokenRevoked(t *testing.T) {
 }
 
 func TestStore_IncrementFailedLogin(t *testing.T) {
-	userEmail := "test@example.com"
-	key := failedLoginAttempts + userEmail
+	key := failedLoginAttempts + testMail
 	s := New()
 
 	tests := []struct {
@@ -332,7 +333,7 @@ func TestStore_IncrementFailedLogin(t *testing.T) {
 			name: "max attempts reached - locks account",
 			mockCall: func(mocks *container.Mocks) {
 				mocks.Redis.EXPECT().Incr(context.Background(), key).Return(intCmdVal(5))
-				mocks.Redis.EXPECT().Set(context.Background(), accountLocked+userEmail, "locked", failedLoginTTL).
+				mocks.Redis.EXPECT().Set(context.Background(), accountLocked+testMail, "locked", failedLoginTTL).
 					Return(statusCmdOK())
 			},
 			want: 5,
@@ -351,7 +352,7 @@ func TestStore_IncrementFailedLogin(t *testing.T) {
 			c, mocks := newTestContext(t)
 			tt.mockCall(mocks)
 
-			got, err := s.IncrementFailedLogin(c, userEmail)
+			got, err := s.IncrementFailedLogin(c, testMail)
 			assert.Equalf(t, tt.wantErr, err, testFailStr, i, tt.name)
 
 			if tt.wantErr == nil {
@@ -362,8 +363,7 @@ func TestStore_IncrementFailedLogin(t *testing.T) {
 }
 
 func TestStore_ResetFailedLogin(t *testing.T) {
-	userEmail := "test@example.com"
-	key := failedLoginAttempts + userEmail
+	key := failedLoginAttempts + testMail
 	s := New()
 
 	tests := []struct {
@@ -378,7 +378,7 @@ func TestStore_ResetFailedLogin(t *testing.T) {
 			},
 		},
 		{
-			name: "redis error",
+			name: redisErr,
 			mockCall: func(mocks *container.Mocks) {
 				mocks.Redis.EXPECT().Del(context.Background(), key).Return(intCmdErr(errRedis))
 			},
@@ -391,15 +391,14 @@ func TestStore_ResetFailedLogin(t *testing.T) {
 			c, mocks := newTestContext(t)
 			tt.mockCall(mocks)
 
-			err := s.ResetFailedLogin(c, userEmail)
+			err := s.ResetFailedLogin(c, testMail)
 			assert.Equalf(t, tt.wantErr, err, testFailStr, i, tt.name)
 		})
 	}
 }
 
 func TestStore_IsAccountLocked(t *testing.T) {
-	userEmail := "test@example.com"
-	key := accountLocked + userEmail
+	key := accountLocked + testMail
 	s := New()
 
 	tests := []struct {
@@ -444,7 +443,7 @@ func TestStore_IsAccountLocked(t *testing.T) {
 			c, mocks := newTestContext(t)
 			tt.mockCall(mocks)
 
-			got, err := s.IsAccountLocked(c, userEmail)
+			got, err := s.IsAccountLocked(c, testMail)
 			assert.Equalf(t, tt.wantErr, err, testFailStr, i, tt.name)
 			assert.Equalf(t, tt.want, got, testFailStr, i, tt.name)
 		})

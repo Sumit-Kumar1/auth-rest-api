@@ -22,7 +22,6 @@ type CtxKey string
 
 var (
 	CtxClaimKey CtxKey = "claims"
-	emailRegExp        = regexp.MustCompile(`^[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,4}$`)
 )
 
 // UserReq represents the request payload for user-related operations.
@@ -57,11 +56,7 @@ func (u *UserReq) Validate() error {
 		return err
 	}
 
-	if err := validatePassword(u.Password); err != nil {
-		return err
-	}
-
-	return nil
+	return validatePassword(u.Password)
 }
 
 // ValidateEmail checks if the provided email address is valid.
@@ -76,6 +71,8 @@ func ValidateEmail(email string) error {
 	if email == "" {
 		return gofrHTTP.ErrorMissingParam{Params: []string{emailStr}}
 	}
+
+	var emailRegExp = regexp.MustCompile(`^[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,4}$`)
 
 	if !emailRegExp.MatchString(email) {
 		return gofrHTTP.ErrorInvalidParam{Params: []string{emailStr}}

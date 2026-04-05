@@ -11,6 +11,10 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+const (
+	accessToken = "access token"
+)
+
 // Storer defines the interface for data storage operations.
 // It provides methods for user and token management.
 //
@@ -104,12 +108,17 @@ func (s *Service) SignIn(ctx *gofr.Context, user *models.UserReq) (*models.Token
 
 	if err = bcrypt.CompareHashAndPassword(exUser.Password, []byte(user.Password)); err != nil {
 		// Increment failed login counter on password mismatch
-		s.Store.IncrementFailedLogin(ctx, user.Email)
+		if _, err := s.Store.IncrementFailedLogin(ctx, user.Email); err != nil {
+			return nil, err
+		}
+
 		return nil, models.ErrPasswordMismatch{}
 	}
 
 	// Reset failed login counter on successful login
-	s.Store.ResetFailedLogin(ctx, user.Email)
+	if err := s.Store.ResetFailedLogin(ctx, user.Email); err != nil {
+		return nil, err
+	}
 
 	tokenData, err := GenerateToken(exUser.ID, exUser.Email)
 	if err != nil {
@@ -128,7 +137,7 @@ func (s *Service) SignIn(ctx *gofr.Context, user *models.UserReq) (*models.Token
 
 func (s *Service) RefreshToken(ctx *gofr.Context, accessClaim *models.Claims, refreshToken string) (*models.TokenResponse, error) {
 	if accessClaim == nil {
-		return nil, gofrHTTP.ErrorMissingParam{Params: []string{"access token"}}
+		return nil, gofrHTTP.ErrorMissingParam{Params: []string{accessToken}}
 	}
 
 	// check if access token is revoked
@@ -170,7 +179,7 @@ func (s *Service) RefreshToken(ctx *gofr.Context, accessClaim *models.Claims, re
 // RevokeToken revokes the provided token, deletes stored token too
 func (s *Service) RevokeToken(ctx *gofr.Context, accClaims *models.Claims) error {
 	if accClaims == nil {
-		return gofrHTTP.ErrorMissingParam{Params: []string{"access token"}}
+		return gofrHTTP.ErrorMissingParam{Params: []string{accessToken}}
 	}
 
 	// Check if already revoked for idempotency
@@ -191,7 +200,7 @@ func (s *Service) RevokeToken(ctx *gofr.Context, accClaims *models.Claims) error
 
 func (s *Service) ValidateTokens(ctx *gofr.Context, accessClaim *models.Claims) (*uuid.UUID, error) {
 	if accessClaim == nil {
-		return nil, gofrHTTP.ErrorMissingParam{Params: []string{"access token"}}
+		return nil, gofrHTTP.ErrorMissingParam{Params: []string{accessToken}}
 	}
 
 	// Check if token has been revoked

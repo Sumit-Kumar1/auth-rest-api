@@ -18,7 +18,13 @@ import (
 	gofrHTTP "gofr.dev/pkg/gofr/http"
 )
 
-const testFailStr = "TEST[%d] Failed - %s"
+const (
+	testFailStr = "TEST[%d] Failed - %s"
+	svcError    = "sevice error"
+	testMail    = "test@example.com"
+	testPass    = "Test@1234"
+	noClaim     = "no claims in context"
+)
 
 func newTestHandler(t *testing.T) (*Handler, *MockServicer, *container.Container) {
 	t.Helper()
@@ -82,10 +88,12 @@ func TestHandler_SignUp(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name:     "invalid json",
-			body:     []byte(`{"email":"test@example.com""password":"Test@1234"}`),
-			mockCall: func() {},
-			wantErr:  true,
+			name: "invalid json",
+			body: []byte(`{"email":"test@example.com""password":"Test@1234"}`),
+			mockCall: func() {
+				// No need for mock as we are getting error before calling signup
+			},
+			wantErr: true,
 		},
 	}
 
@@ -133,10 +141,12 @@ func TestHandler_SignIn(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name:     "invalid json",
-			body:     []byte(`invalid`),
-			mockCall: func() {},
-			wantErr:  true,
+			name: "invalid json",
+			body: []byte(`invalid`),
+			mockCall: func() {
+				// we got error before signIn
+			},
+			wantErr: true,
 		},
 	}
 
@@ -165,7 +175,7 @@ func TestHandler_RefreshToken(t *testing.T) {
 	h, mockService, mockContainer := newTestHandler(t)
 
 	claims := &models.Claims{
-		Email:    "test@example.com",
+		Email:    testMail,
 		ClaimUID: uuid.NewString(),
 	}
 
@@ -186,11 +196,13 @@ func TestHandler_RefreshToken(t *testing.T) {
 			},
 		},
 		{
-			name:     "no claims in context",
-			body:     []byte(`{"refreshToken":"token"}`),
-			claims:   nil,
-			mockCall: func() {},
-			wantErr:  true,
+			name:   noClaim,
+			body:   []byte(`{"refreshToken":"token"}`),
+			claims: nil,
+			mockCall: func() {
+				// error before mock call, no need for mock
+			},
+			wantErr: true,
 		},
 		{
 			name:   "service error - token revoked",
@@ -229,7 +241,7 @@ func TestHandler_RevokeToken(t *testing.T) {
 	h, mockService, mockContainer := newTestHandler(t)
 
 	claims := &models.Claims{
-		Email:    "test@example.com",
+		Email:    testMail,
 		ClaimUID: uuid.NewString(),
 	}
 
@@ -247,13 +259,15 @@ func TestHandler_RevokeToken(t *testing.T) {
 			},
 		},
 		{
-			name:     "no claims in context",
-			claims:   nil,
-			mockCall: func() {},
-			wantErr:  true,
+			name:   noClaim,
+			claims: nil,
+			mockCall: func() {
+				// error before mock call
+			},
+			wantErr: true,
 		},
 		{
-			name:   "service error",
+			name:   svcError,
 			claims: claims,
 			mockCall: func() {
 				mockService.EXPECT().RevokeToken(gomock.Any(), gomock.Any()).Return(errors.New("revoke error"))
@@ -285,7 +299,7 @@ func TestHandler_Validate(t *testing.T) {
 	userID := uuid.New()
 
 	claims := &models.Claims{
-		Email:    "test@example.com",
+		Email:    testMail,
 		ClaimUID: uuid.NewString(),
 	}
 
@@ -303,13 +317,15 @@ func TestHandler_Validate(t *testing.T) {
 			},
 		},
 		{
-			name:     "no claims in context",
-			claims:   nil,
-			mockCall: func() {},
-			wantErr:  true,
+			name:   noClaim,
+			claims: nil,
+			mockCall: func() {
+				// error before mock call
+			},
+			wantErr: true,
 		},
 		{
-			name:   "service error",
+			name:   svcError,
 			claims: claims,
 			mockCall: func() {
 				mockService.EXPECT().ValidateTokens(gomock.Any(), gomock.Any()).Return(nil, models.ErrTokenRevoked{})

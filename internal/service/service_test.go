@@ -13,6 +13,12 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+const (
+	testMail = "test@exampl.com"
+	testPass = "Test@1234"
+	redisErr = "redis error"
+)
+
 func newTestService(t *testing.T) (*Service, *MockStorer) {
 	t.Helper()
 	ctrl := gomock.NewController(t)
@@ -35,49 +41,53 @@ func TestService_SignUp(t *testing.T) {
 	}{
 		{
 			name: "success",
-			user: &models.UserReq{Email: "test@example.com", Password: "Test@1234"},
+			user: &models.UserReq{Email: testMail, Password: testPass},
 			mockCall: func() {
-				mockStore.EXPECT().GetUserByEmail(gomock.Any(), "test@example.com").
-					Return(nil, gofrHTTP.ErrorEntityNotFound{Name: "user", Value: "test@example.com"})
+				mockStore.EXPECT().GetUserByEmail(gomock.Any(), testMail).
+					Return(nil, gofrHTTP.ErrorEntityNotFound{Name: "user", Value: testMail})
 				mockStore.EXPECT().CreateUser(gomock.Any(), gomock.Any()).Return(nil)
 			},
 		},
 		{
-			name:     "nil user",
-			user:     nil,
-			mockCall: func() {},
-			wantErr:  true,
+			name: "nil user",
+			user: nil,
+			mockCall: func() {
+				// error before mock call
+			},
+			wantErr: true,
 		},
 		{
-			name:     "invalid email",
-			user:     &models.UserReq{Email: "invalid", Password: "Test@1234"},
-			mockCall: func() {},
-			wantErr:  true,
+			name: "invalid email",
+			user: &models.UserReq{Email: "invalid", Password: testPass},
+			mockCall: func() {
+				// error before mock
+			},
+			wantErr: true,
 		},
 		{
 			name: "user already exists",
-			user: &models.UserReq{Email: "test@example.com", Password: "Test@1234"},
+			user: &models.UserReq{Email: testMail, Password: testPass},
 			mockCall: func() {
-				mockStore.EXPECT().GetUserByEmail(gomock.Any(), "test@example.com").
-					Return(&models.UserData{ID: "123", Email: "test@example.com"}, nil)
+				mockStore.EXPECT().GetUserByEmail(gomock.Any(), testMail).
+					Return(&models.UserData{ID: "123", Email: testMail}, nil)
 			},
 			wantErr: true,
 		},
 		{
 			name: "store GetUserByEmail error",
-			user: &models.UserReq{Email: "test@example.com", Password: "Test@1234"},
+			user: &models.UserReq{Email: testMail, Password: testPass},
 			mockCall: func() {
-				mockStore.EXPECT().GetUserByEmail(gomock.Any(), "test@example.com").
+				mockStore.EXPECT().GetUserByEmail(gomock.Any(), testMail).
 					Return(nil, errors.New("db error"))
 			},
 			wantErr: true,
 		},
 		{
 			name: "store CreateUser error",
-			user: &models.UserReq{Email: "test@example.com", Password: "Test@1234"},
+			user: &models.UserReq{Email: testMail, Password: testPass},
 			mockCall: func() {
-				mockStore.EXPECT().GetUserByEmail(gomock.Any(), "test@example.com").
-					Return(nil, gofrHTTP.ErrorEntityNotFound{Name: "user", Value: "test@example.com"})
+				mockStore.EXPECT().GetUserByEmail(gomock.Any(), testMail).
+					Return(nil, gofrHTTP.ErrorEntityNotFound{Name: "user", Value: testMail})
 				mockStore.EXPECT().CreateUser(gomock.Any(), gomock.Any()).Return(errors.New("create error"))
 			},
 			wantErr: true,
@@ -104,7 +114,7 @@ func TestService_SignIn(t *testing.T) {
 
 	svc, mockStore := newTestService(t)
 
-	hashedPass, _ := bcrypt.GenerateFromPassword([]byte("Test@1234"), 10)
+	hashedPass, _ := bcrypt.GenerateFromPassword([]byte(testPass), 10)
 	userID := uuid.NewString()
 
 	tests := []struct {
@@ -115,74 +125,78 @@ func TestService_SignIn(t *testing.T) {
 	}{
 		{
 			name: "success",
-			user: &models.UserReq{Email: "test@example.com", Password: "Test@1234"},
+			user: &models.UserReq{Email: testMail, Password: testPass},
 			mockCall: func() {
-				mockStore.EXPECT().IsAccountLocked(gomock.Any(), "test@example.com").Return(false, nil)
-				mockStore.EXPECT().GetUserByEmail(gomock.Any(), "test@example.com").
-					Return(&models.UserData{ID: userID, Email: "test@example.com", Password: hashedPass}, nil)
-				mockStore.EXPECT().ResetFailedLogin(gomock.Any(), "test@example.com").Return(nil)
-				mockStore.EXPECT().CreateToken(gomock.Any(), "test@example.com", gomock.Any()).Return(nil)
+				mockStore.EXPECT().IsAccountLocked(gomock.Any(), testMail).Return(false, nil)
+				mockStore.EXPECT().GetUserByEmail(gomock.Any(), testMail).
+					Return(&models.UserData{ID: userID, Email: testMail, Password: hashedPass}, nil)
+				mockStore.EXPECT().ResetFailedLogin(gomock.Any(), testMail).Return(nil)
+				mockStore.EXPECT().CreateToken(gomock.Any(), testMail, gomock.Any()).Return(nil)
 			},
 		},
 		{
-			name:     "nil user",
-			user:     nil,
-			mockCall: func() {},
-			wantErr:  true,
+			name: "nil user",
+			user: nil,
+			mockCall: func() {
+				// error before mock
+			},
+			wantErr: true,
 		},
 		{
-			name:     "invalid email",
-			user:     &models.UserReq{Email: "invalid", Password: "Test@1234"},
-			mockCall: func() {},
-			wantErr:  true,
+			name: "invalid email",
+			user: &models.UserReq{Email: "invalid", Password: testPass},
+			mockCall: func() {
+				// error before mock
+			},
+			wantErr: true,
 		},
 		{
 			name: "account locked",
-			user: &models.UserReq{Email: "test@example.com", Password: "Test@1234"},
+			user: &models.UserReq{Email: testMail, Password: testPass},
 			mockCall: func() {
-				mockStore.EXPECT().IsAccountLocked(gomock.Any(), "test@example.com").Return(true, nil)
+				mockStore.EXPECT().IsAccountLocked(gomock.Any(), testMail).Return(true, nil)
 			},
 			wantErr: true,
 		},
 		{
 			name: "IsAccountLocked error",
-			user: &models.UserReq{Email: "test@example.com", Password: "Test@1234"},
+			user: &models.UserReq{Email: testMail, Password: testPass},
 			mockCall: func() {
-				mockStore.EXPECT().IsAccountLocked(gomock.Any(), "test@example.com").Return(false, errors.New("redis error"))
+				mockStore.EXPECT().IsAccountLocked(gomock.Any(), testMail).Return(false, errors.New(redisErr))
 			},
 			wantErr: true,
 		},
 		{
 			name: "user not found",
-			user: &models.UserReq{Email: "test@example.com", Password: "Test@1234"},
+			user: &models.UserReq{Email: testMail, Password: testPass},
 			mockCall: func() {
-				mockStore.EXPECT().IsAccountLocked(gomock.Any(), "test@example.com").Return(false, nil)
-				mockStore.EXPECT().GetUserByEmail(gomock.Any(), "test@example.com").
-					Return(nil, gofrHTTP.ErrorEntityNotFound{Name: "user", Value: "test@example.com"})
-				mockStore.EXPECT().IncrementFailedLogin(gomock.Any(), "test@example.com").Return(1, nil)
+				mockStore.EXPECT().IsAccountLocked(gomock.Any(), testMail).Return(false, nil)
+				mockStore.EXPECT().GetUserByEmail(gomock.Any(), testMail).
+					Return(nil, gofrHTTP.ErrorEntityNotFound{Name: "user", Value: testMail})
+				mockStore.EXPECT().IncrementFailedLogin(gomock.Any(), testMail).Return(1, nil)
 			},
 			wantErr: true,
 		},
 		{
 			name: "wrong password",
-			user: &models.UserReq{Email: "test@example.com", Password: "Wrong@1234"},
+			user: &models.UserReq{Email: testMail, Password: "Wrong@1234"},
 			mockCall: func() {
-				mockStore.EXPECT().IsAccountLocked(gomock.Any(), "test@example.com").Return(false, nil)
-				mockStore.EXPECT().GetUserByEmail(gomock.Any(), "test@example.com").
-					Return(&models.UserData{ID: userID, Email: "test@example.com", Password: hashedPass}, nil)
-				mockStore.EXPECT().IncrementFailedLogin(gomock.Any(), "test@example.com").Return(1, nil)
+				mockStore.EXPECT().IsAccountLocked(gomock.Any(), testMail).Return(false, nil)
+				mockStore.EXPECT().GetUserByEmail(gomock.Any(), testMail).
+					Return(&models.UserData{ID: userID, Email: testMail, Password: hashedPass}, nil)
+				mockStore.EXPECT().IncrementFailedLogin(gomock.Any(), testMail).Return(1, nil)
 			},
 			wantErr: true,
 		},
 		{
 			name: "create token error",
-			user: &models.UserReq{Email: "test@example.com", Password: "Test@1234"},
+			user: &models.UserReq{Email: testMail, Password: testPass},
 			mockCall: func() {
-				mockStore.EXPECT().IsAccountLocked(gomock.Any(), "test@example.com").Return(false, nil)
-				mockStore.EXPECT().GetUserByEmail(gomock.Any(), "test@example.com").
-					Return(&models.UserData{ID: userID, Email: "test@example.com", Password: hashedPass}, nil)
-				mockStore.EXPECT().ResetFailedLogin(gomock.Any(), "test@example.com").Return(nil)
-				mockStore.EXPECT().CreateToken(gomock.Any(), "test@example.com", gomock.Any()).Return(errors.New("token error"))
+				mockStore.EXPECT().IsAccountLocked(gomock.Any(), testMail).Return(false, nil)
+				mockStore.EXPECT().GetUserByEmail(gomock.Any(), testMail).
+					Return(&models.UserData{ID: userID, Email: testMail, Password: hashedPass}, nil)
+				mockStore.EXPECT().ResetFailedLogin(gomock.Any(), testMail).Return(nil)
+				mockStore.EXPECT().CreateToken(gomock.Any(), testMail, gomock.Any()).Return(errors.New("token error"))
 			},
 			wantErr: true,
 		},
@@ -242,8 +256,10 @@ func TestService_RefreshToken(t *testing.T) {
 			name:         "nil access claim",
 			accessClaim:  nil,
 			refreshToken: tokenData.RefreshToken,
-			mockCall:     func() {},
-			wantErr:      true,
+			mockCall: func() {
+				// error before mock
+			},
+			wantErr: true,
 		},
 		{
 			name:         "access token revoked",
@@ -259,7 +275,7 @@ func TestService_RefreshToken(t *testing.T) {
 			accessClaim:  accessClaim,
 			refreshToken: tokenData.RefreshToken,
 			mockCall: func() {
-				mockStore.EXPECT().IsTokenRevoked(gomock.Any(), accessClaim.ClaimUID).Return(false, errors.New("redis error"))
+				mockStore.EXPECT().IsTokenRevoked(gomock.Any(), accessClaim.ClaimUID).Return(false, errors.New(redisErr))
 			},
 			wantErr: true,
 		},
@@ -336,10 +352,12 @@ func TestService_RevokeToken(t *testing.T) {
 			},
 		},
 		{
-			name:     "nil claim",
-			claim:    nil,
-			mockCall: func() {},
-			wantErr:  true,
+			name:  "nil claim",
+			claim: nil,
+			mockCall: func() {
+				// error before mock
+			},
+			wantErr: true,
 		},
 		{
 			name:  "already revoked - idempotent",
@@ -349,10 +367,10 @@ func TestService_RevokeToken(t *testing.T) {
 			},
 		},
 		{
-			name:  "IsTokenRevoked error",
+			name:  "token revoked error",
 			claim: claim,
 			mockCall: func() {
-				mockStore.EXPECT().IsTokenRevoked(gomock.Any(), claim.ClaimUID).Return(false, errors.New("redis error"))
+				mockStore.EXPECT().IsTokenRevoked(gomock.Any(), claim.ClaimUID).Return(false, errors.New(redisErr))
 			},
 			wantErr: true,
 		},
@@ -407,10 +425,11 @@ func TestService_ValidateTokens(t *testing.T) {
 			wantUID: true,
 		},
 		{
-			name:     "nil claim",
-			claim:    nil,
-			mockCall: func() {},
-			wantErr:  true,
+			name:  "nil claim",
+			claim: nil,
+			mockCall: func() { //error before mock
+			},
+			wantErr: true,
 		},
 		{
 			name:  "token revoked",
@@ -424,7 +443,7 @@ func TestService_ValidateTokens(t *testing.T) {
 			name:  "IsTokenRevoked error",
 			claim: claim,
 			mockCall: func() {
-				mockStore.EXPECT().IsTokenRevoked(gomock.Any(), claim.ClaimUID).Return(false, errors.New("redis error"))
+				mockStore.EXPECT().IsTokenRevoked(gomock.Any(), claim.ClaimUID).Return(false, errors.New(redisErr))
 			},
 			wantErr: true,
 		},

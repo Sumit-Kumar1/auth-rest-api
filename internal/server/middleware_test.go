@@ -13,13 +13,18 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-const testFailStr = "TEST[%d] Failed - %s"
+const (
+	testFailStr      = "TEST[%d] Failed - %s"
+	bearer           = "Bearer "
+	testMail         = "test@example.com"
+	validateEndpoint = "/validate"
+)
 
 func generateTestToken(t *testing.T, secret string) string {
 	t.Helper()
 
 	claims := models.Claims{
-		Email:    "test@example.com",
+		Email:    testMail,
 		ClaimUID: uuid.NewString(),
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(15 * time.Minute)),
@@ -49,38 +54,38 @@ func TestAuthMiddleware_ProtectedRoutes(t *testing.T) {
 	}{
 		{
 			name:       "validate with valid token",
-			path:       "/validate",
-			authHeader: "Bearer " + validToken,
+			path:       validateEndpoint,
+			authHeader: bearer + validToken,
 			wantPass:   true,
 		},
 		{
 			name:       "refresh with valid token",
 			path:       "/refresh",
-			authHeader: "Bearer " + validToken,
+			authHeader: bearer + validToken,
 			wantPass:   true,
 		},
 		{
 			name:       "revoke with valid token",
 			path:       "/revoke",
-			authHeader: "Bearer " + validToken,
+			authHeader: bearer + validToken,
 			wantPass:   true,
 		},
 		{
 			name:       "validate without token",
-			path:       "/validate",
+			path:       validateEndpoint,
 			authHeader: "",
 			wantPass:   false,
 		},
 		{
 			name:       "validate with invalid token",
-			path:       "/validate",
+			path:       validateEndpoint,
 			authHeader: "Bearer invalid-token",
 			wantPass:   false,
 		},
 		{
 			name:       "validate with wrong secret token",
-			path:       "/validate",
-			authHeader: "Bearer " + generateTestToken(t, "wrong_secret"),
+			path:       validateEndpoint,
+			authHeader: bearer + generateTestToken(t, "wrong_secret"),
 			wantPass:   false,
 		},
 	}
@@ -139,14 +144,14 @@ func TestAuthMiddleware_ClaimsInjected(t *testing.T) {
 		claims, ok := r.Context().Value(models.CtxClaimKey).(*models.Claims)
 		assert.True(t, ok, "claims should be in context")
 		assert.NotNil(t, claims)
-		assert.Equal(t, "test@example.com", claims.Email)
+		assert.Equal(t, testMail, claims.Email)
 	})
 
 	middleware := AuthMiddleware()
 	handler := middleware(nextHandler)
 
-	req := httptest.NewRequest(http.MethodPost, "/validate", http.NoBody)
-	req.Header.Set("Authorization", "Bearer "+validToken)
+	req := httptest.NewRequest(http.MethodPost, validateEndpoint, http.NoBody)
+	req.Header.Set("Authorization", bearer+validToken)
 
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
@@ -164,7 +169,7 @@ func TestValidate(t *testing.T) {
 	}{
 		{
 			name:       "valid token",
-			authHeader: "Bearer " + validToken,
+			authHeader: bearer + validToken,
 		},
 		{
 			name:       "empty header",
@@ -183,7 +188,7 @@ func TestValidate(t *testing.T) {
 		},
 		{
 			name:       "wrong signing key",
-			authHeader: "Bearer " + generateTestToken(t, "wrong_secret"),
+			authHeader: bearer + generateTestToken(t, "wrong_secret"),
 			wantErr:    true,
 		},
 	}
@@ -197,7 +202,7 @@ func TestValidate(t *testing.T) {
 			} else {
 				assert.NoErrorf(t, err, testFailStr, i, tt.name)
 				assert.NotNil(t, claims)
-				assert.Equal(t, "test@example.com", claims.Email)
+				assert.Equal(t, testMail, claims.Email)
 			}
 		})
 	}
