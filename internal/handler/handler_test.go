@@ -3,70 +3,97 @@ package handler
 import (
 	"bytes"
 	"context"
-	"encoding/json"
-	"log/slog"
+	"errors"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"testing"
 
 	"auth-rest-api/internal/models"
-	"auth-rest-api/internal/server"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/mock/gomock"
+	"gofr.dev/pkg/gofr"
+	"gofr.dev/pkg/gofr/container"
+	gofrHTTP "gofr.dev/pkg/gofr/http"
 )
 
-func TestHandler_SignUp(t *testing.T) {
+const (
+	testFailStr = "TEST[%d] Failed - %s"
+	svcError    = "sevice error"
+	testMail    = "test@example.com"
+	testPass    = "Test@1234"
+	noClaim     = "no claims in context"
+)
+
+func newTestHandler(t *testing.T) (*Handler, *MockServicer, *container.Container) {
+	t.Helper()
+
 	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
 	mockService := NewMockServicer(ctrl)
-	h := New(mockService)
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	mockContainer, _ := container.NewMockContainer(t)
 
-	ctx := context.WithValue(context.Background(), server.Logger, logger)
+	return New(mockService), mockService, mockContainer
+}
+
+func newGofrContext(t *testing.T, method, path string, body []byte, mockContainer *container.Container, claims *models.Claims) *gofr.Context {
+	t.Helper()
+
+	var req *http.Request
+	if body != nil {
+		req = httptest.NewRequest(method, path, bytes.NewBuffer(body))
+		req.Header.Set("Content-Type", "application/json")
+	} else {
+		req = httptest.NewRequest(method, path, http.NoBody)
+	}
+
+	ctx := req.Context()
+	if claims != nil {
+		ctx = context.WithValue(ctx, models.CtxClaimKey, claims)
+	}
+
+	req = req.WithContext(ctx)
+
+	gofrReq := gofrHTTP.NewRequest(req)
+
+	return &gofr.Context{
+		Context:   ctx,
+		Request:   gofrReq,
+		Container: mockContainer,
+	}
+}
+
+func TestHandler_SignUp(t *testing.T) {
+	h, mockService, mockContainer := newTestHandler(t)
 
 	tests := []struct {
-		name        string
-		requestBody json.RawMessage
-		mockCall    func()
-		expCode     int
+		name     string
+		body     []byte
+		mockCall func()
+		wantErr  bool
 	}{
 		{
-			name:        "Successful SignUp",
-			requestBody: json.RawMessage(`{"email":"testuser@gmail.com","password":"12345"}`),
+			name: "success",
+			body: []byte(`{"email":"test@example.com","password":"Test@1234"}`),
 			mockCall: func() {
-				mockService.EXPECT().SignUp(ctx, gomock.Any()).Return(nil)
+				mockService.EXPECT().SignUp(gomock.Any(), gomock.Any()).Return(nil)
 			},
-			expCode: http.StatusCreated,
 		},
 		{
-			name:     "Request Body Missing",
-			mockCall: func() {},
-			expCode:  http.StatusBadRequest,
-		},
-		{
-			name:        "Invalid JSON",
-			requestBody: json.RawMessage(`{"email":"testuser@gmail.com""password":"12345"}`),
-			mockCall:    func() {},
-			expCode:     http.StatusBadRequest,
-		},
-		{
-			name:        "User  Already Exists",
-			requestBody: json.RawMessage(`{"email":"testuser@gmail.com","password":"12345"}`),
+			name: "service error",
+			body: []byte(`{"email":"test@example.com","password":"Test@1234"}`),
 			mockCall: func() {
-				mockService.EXPECT().SignUp(ctx, gomock.Any()).Return(models.ErrUserAlreadyExists)
+				mockService.EXPECT().SignUp(gomock.Any(), gomock.Any()).Return(errors.New("signup error"))
 			},
-			expCode: http.StatusConflict,
+			wantErr: true,
 		},
 		{
-			name:        "Internal Server Error",
-			requestBody: json.RawMessage(`{"email":"testuser@gmail.com","password":"12345"}`),
+			name: "invalid json",
+			body: []byte(`{"email":"test@example.com""password":"Test@1234"}`),
 			mockCall: func() {
-				mockService.EXPECT().SignUp(ctx, gomock.Any()).Return(models.ErrDBNotConnected)
+				// No need for mock as we are getting error before calling signup
 			},
-			expCode: http.StatusInternalServerError,
+			wantErr: true,
 		},
 	}
 
@@ -74,12 +101,288 @@ func TestHandler_SignUp(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			tt.mockCall()
 
-			w := httptest.NewRecorder()
-			r := httptest.NewRequestWithContext(ctx, "POST", "/sign-up", bytes.NewBuffer(tt.requestBody))
+			c := newGofrContext(t, http.MethodPost, "/signup", tt.body, mockContainer, nil)
 
-			h.SignUp(w, r)
+			resp, err := h.SignUp(c)
+			if tt.wantErr {
+				assert.Errorf(t, err, testFailStr, i, tt.name)
+			} else {
+				assert.NoErrorf(t, err, testFailStr, i, tt.name)
+				assert.Equal(t, "user created successfully", resp)
+			}
+		})
+	}
+}
 
-			assert.Equalf(t, tt.expCode, w.Code, "TEST[%d] Failed - %s", i, tt.name)
+func TestHandler_SignIn(t *testing.T) {
+	h, mockService, mockContainer := newTestHandler(t)
+
+	tests := []struct {
+		name     string
+		body     []byte
+		mockCall func()
+		wantErr  bool
+	}{
+		{
+			name: "success",
+			body: []byte(`{"email":"test@example.com","password":"Test@1234"}`),
+			mockCall: func() {
+				mockService.EXPECT().SignIn(gomock.Any(), gomock.Any()).
+					Return(&models.TokenResponse{AccessToken: "acc-token", RefreshToken: "ref-token"}, nil)
+			},
+		},
+		{
+			name: "service error",
+			body: []byte(`{"email":"test@example.com","password":"Test@1234"}`),
+			mockCall: func() {
+				mockService.EXPECT().SignIn(gomock.Any(), gomock.Any()).
+					Return(nil, models.ErrPasswordMismatch{})
+			},
+			wantErr: true,
+		},
+		{
+			name: "invalid json",
+			body: []byte(`invalid`),
+			mockCall: func() {
+				// we got error before signIn
+			},
+			wantErr: true,
+		},
+	}
+
+	for i, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.mockCall()
+
+			c := newGofrContext(t, http.MethodPost, "/signin", tt.body, mockContainer, nil)
+
+			resp, err := h.SignIn(c)
+			if tt.wantErr {
+				assert.Errorf(t, err, testFailStr, i, tt.name)
+			} else {
+				assert.NoErrorf(t, err, testFailStr, i, tt.name)
+
+				userResp, ok := resp.(models.UserResp)
+				assert.True(t, ok)
+				assert.NotEmpty(t, userResp.AccessToken)
+				assert.NotEmpty(t, userResp.RefreshToken)
+			}
+		})
+	}
+}
+
+func TestHandler_RefreshToken(t *testing.T) {
+	h, mockService, mockContainer := newTestHandler(t)
+
+	claims := &models.Claims{
+		Email:    testMail,
+		ClaimUID: uuid.NewString(),
+	}
+
+	tests := []struct {
+		name     string
+		body     []byte
+		claims   *models.Claims
+		mockCall func()
+		wantErr  bool
+	}{
+		{
+			name:   "success",
+			body:   []byte(`{"refreshToken":"valid-refresh-token"}`),
+			claims: claims,
+			mockCall: func() {
+				mockService.EXPECT().RefreshToken(gomock.Any(), gomock.Any(), "valid-refresh-token").
+					Return(&models.TokenResponse{AccessToken: "new-acc", RefreshToken: "new-ref"}, nil)
+			},
+		},
+		{
+			name:   noClaim,
+			body:   []byte(`{"refreshToken":"token"}`),
+			claims: nil,
+			mockCall: func() {
+				// error before mock call, no need for mock
+			},
+			wantErr: true,
+		},
+		{
+			name:   "service error - token revoked",
+			body:   []byte(`{"refreshToken":"token"}`),
+			claims: claims,
+			mockCall: func() {
+				mockService.EXPECT().RefreshToken(gomock.Any(), gomock.Any(), "token").
+					Return(nil, models.ErrTokenRevoked{})
+			},
+			wantErr: true,
+		},
+	}
+
+	for i, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.mockCall()
+
+			c := newGofrContext(t, http.MethodPost, "/refresh", tt.body, mockContainer, tt.claims)
+
+			resp, err := h.RefreshToken(c)
+			if tt.wantErr {
+				assert.Errorf(t, err, testFailStr, i, tt.name)
+			} else {
+				assert.NoErrorf(t, err, testFailStr, i, tt.name)
+
+				userResp, ok := resp.(models.UserResp)
+				assert.True(t, ok)
+				assert.NotEmpty(t, userResp.AccessToken)
+				assert.NotEmpty(t, userResp.RefreshToken)
+			}
+		})
+	}
+}
+
+func TestHandler_RevokeToken(t *testing.T) {
+	h, mockService, mockContainer := newTestHandler(t)
+
+	claims := &models.Claims{
+		Email:    testMail,
+		ClaimUID: uuid.NewString(),
+	}
+
+	tests := []struct {
+		name     string
+		claims   *models.Claims
+		mockCall func()
+		wantErr  bool
+	}{
+		{
+			name:   "success",
+			claims: claims,
+			mockCall: func() {
+				mockService.EXPECT().RevokeToken(gomock.Any(), gomock.Any()).Return(nil)
+			},
+		},
+		{
+			name:   noClaim,
+			claims: nil,
+			mockCall: func() {
+				// error before mock call
+			},
+			wantErr: true,
+		},
+		{
+			name:   svcError,
+			claims: claims,
+			mockCall: func() {
+				mockService.EXPECT().RevokeToken(gomock.Any(), gomock.Any()).Return(errors.New("revoke error"))
+			},
+			wantErr: true,
+		},
+	}
+
+	for i, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.mockCall()
+
+			c := newGofrContext(t, http.MethodPost, "/revoke", nil, mockContainer, tt.claims)
+
+			resp, err := h.RevokeToken(c)
+			if tt.wantErr {
+				assert.Errorf(t, err, testFailStr, i, tt.name)
+			} else {
+				assert.NoErrorf(t, err, testFailStr, i, tt.name)
+				assert.Equal(t, "token revoked successfully", resp)
+			}
+		})
+	}
+}
+
+func TestHandler_Validate(t *testing.T) {
+	h, mockService, mockContainer := newTestHandler(t)
+
+	userID := uuid.New()
+
+	claims := &models.Claims{
+		Email:    testMail,
+		ClaimUID: uuid.NewString(),
+	}
+
+	tests := []struct {
+		name     string
+		claims   *models.Claims
+		mockCall func()
+		wantErr  bool
+	}{
+		{
+			name:   "success",
+			claims: claims,
+			mockCall: func() {
+				mockService.EXPECT().ValidateTokens(gomock.Any(), gomock.Any()).Return(&userID, nil)
+			},
+		},
+		{
+			name:   noClaim,
+			claims: nil,
+			mockCall: func() {
+				// error before mock call
+			},
+			wantErr: true,
+		},
+		{
+			name:   svcError,
+			claims: claims,
+			mockCall: func() {
+				mockService.EXPECT().ValidateTokens(gomock.Any(), gomock.Any()).Return(nil, models.ErrTokenRevoked{})
+			},
+			wantErr: true,
+		},
+	}
+
+	for i, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.mockCall()
+
+			c := newGofrContext(t, http.MethodPost, "/validate", nil, mockContainer, tt.claims)
+
+			resp, err := h.Validate(c)
+			if tt.wantErr {
+				assert.Errorf(t, err, testFailStr, i, tt.name)
+			} else {
+				assert.NoErrorf(t, err, testFailStr, i, tt.name)
+				assert.NotNil(t, resp)
+			}
+		})
+	}
+}
+
+func TestExtractClaimFromCtx(t *testing.T) {
+	_, _, mockContainer := newTestHandler(t)
+
+	tests := []struct {
+		name    string
+		claims  *models.Claims
+		wantErr bool
+	}{
+		{
+			name:   "success",
+			claims: &models.Claims{Email: "test@example.com", ClaimUID: uuid.NewString()},
+		},
+		{
+			name:    "no claims",
+			claims:  nil,
+			wantErr: true,
+		},
+	}
+
+	for i, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := newGofrContext(t, http.MethodPost, "/validate", nil, mockContainer, tt.claims)
+
+			claims, err := extractClaimFromCtx(c)
+			if tt.wantErr {
+				assert.Errorf(t, err, testFailStr, i, tt.name)
+				assert.Nil(t, claims)
+			} else {
+				assert.NoErrorf(t, err, testFailStr, i, tt.name)
+				assert.NotNil(t, claims)
+				assert.Equal(t, tt.claims.Email, claims.Email)
+			}
 		})
 	}
 }

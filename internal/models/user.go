@@ -3,6 +3,25 @@ package models
 import (
 	"regexp"
 	"strings"
+	"unicode"
+
+	gofrHTTP "gofr.dev/pkg/gofr/http"
+)
+
+const (
+	emailStr       = "email"
+	passwd         = "password"
+	passwdLenErr   = "password must be at least 8 characters"
+	upperCaseErr   = "password must contain at least one uppercase letter"
+	lowerCaseErr   = "password must contain at least one lowercase letter"
+	numberErr      = "password must contain at least one number"
+	specialCharErr = "password must contain at least one special character"
+)
+
+type CtxKey string
+
+var (
+	CtxClaimKey CtxKey = "claims"
 )
 
 // UserReq represents the request payload for user-related operations.
@@ -37,11 +56,7 @@ func (u *UserReq) Validate() error {
 		return err
 	}
 
-	if err := validatePassword(u.Password); err != nil {
-		return err
-	}
-
-	return nil
+	return validatePassword(u.Password)
 }
 
 // ValidateEmail checks if the provided email address is valid.
@@ -52,28 +67,64 @@ func (u *UserReq) Validate() error {
 // Returns an error if the email is invalid.
 func ValidateEmail(email string) error {
 	email = strings.ToLower(strings.TrimSpace(email))
-	emailRegex := regexp.MustCompile(`^[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,4}$`)
 
 	if email == "" {
-		return ErrRequired("email")
+		return gofrHTTP.ErrorMissingParam{Params: []string{emailStr}}
 	}
 
-	if !emailRegex.MatchString(email) {
-		return ErrInvalid("email")
+	var emailRegExp = regexp.MustCompile(`^[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,4}$`)
+
+	if !emailRegExp.MatchString(email) {
+		return gofrHTTP.ErrorInvalidParam{Params: []string{emailStr}}
 	}
 
 	return nil
 }
 
 func validatePassword(password string) error {
-	passwd := strings.TrimSpace(password)
+	var (
+		hasUpper    = false
+		hasLower    = false
+		hasNumber   = false
+		hasSpecial  = false
+		trimmedPass = strings.TrimSpace(password)
+	)
 
-	if passwd == "" {
-		return ErrRequired("password")
+	if trimmedPass == "" {
+		return gofrHTTP.ErrorMissingParam{Params: []string{passwd}}
 	}
 
-	if len(passwd) < 8 {
-		return ErrInvalid("password")
+	if len(trimmedPass) < 8 {
+		return gofrHTTP.ErrorInvalidParam{Params: []string{passwdLenErr}}
+	}
+
+	for _, char := range trimmedPass {
+		switch {
+		case unicode.IsUpper(char):
+			hasUpper = true
+		case unicode.IsLower(char):
+			hasLower = true
+		case unicode.IsNumber(char):
+			hasNumber = true
+		case unicode.IsPunct(char) || unicode.IsSymbol(char):
+			hasSpecial = true
+		}
+	}
+
+	if !hasUpper {
+		return gofrHTTP.ErrorInvalidParam{Params: []string{upperCaseErr}}
+	}
+
+	if !hasLower {
+		return gofrHTTP.ErrorInvalidParam{Params: []string{lowerCaseErr}}
+	}
+
+	if !hasNumber {
+		return gofrHTTP.ErrorInvalidParam{Params: []string{numberErr}}
+	}
+
+	if !hasSpecial {
+		return gofrHTTP.ErrorInvalidParam{Params: []string{specialCharErr}}
 	}
 
 	return nil

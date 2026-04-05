@@ -1,258 +1,145 @@
 package handler
 
 import (
-	"context"
-	"encoding/json"
 	"errors"
-	"fmt"
-	"io"
-	"log/slog"
-	"net/http"
 	"strings"
 
 	"auth-rest-api/internal/models"
-	"auth-rest-api/internal/server"
 
 	"github.com/google/uuid"
+	"gofr.dev/pkg/gofr"
+	gofrHTTP "gofr.dev/pkg/gofr/http"
 )
 
 // Servicer defines the interface for service layer operations.
-// It provides methods for user authentication and token management.
 //
 //go:generate mockgen -source=handler.go -destination=mock_interface.go -package=handler
 type Servicer interface {
-	SignUp(ctx context.Context, user *models.UserReq) error
-	SignIn(ctx context.Context, user *models.UserReq) (*models.TokenResponse, error)
-	RefreshToken(ctx context.Context, accToken, refToken string) (*models.TokenResponse, error)
-	RevokeToken(ctx context.Context, accToken string) error
-	ValidateTokens(ctx context.Context, token string) (*uuid.UUID, error)
+	SignUp(ctx *gofr.Context, user *models.UserReq) error
+	SignIn(ctx *gofr.Context, user *models.UserReq) (*models.TokenResponse, error)
+	RefreshToken(ctx *gofr.Context, accessClaim *models.Claims, refToken string) (*models.TokenResponse, error)
+	RevokeToken(ctx *gofr.Context, accessClaim *models.Claims) error
+	ValidateTokens(ctx *gofr.Context, accessClaim *models.Claims) (*uuid.UUID, error)
 }
 
-// Handler represents the HTTP request handler layer.
-// It processes incoming HTTP requests and delegates business logic to the service layer.
+// Handler processes HTTP requests and delegates to the service layer.
 type Handler struct {
 	Service Servicer
 }
 
-// New creates a new instance of the Handler with the provided service implementation.
-// It initializes the handler with the required dependencies.
+// New creates a new Handler with the provided service implementation.
 func New(s Servicer) *Handler {
 	return &Handler{Service: s}
 }
 
-func (h *Handler) Validate(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	logger := ctx.Value(server.Logger).(*slog.Logger)
-
-	authHeader := r.Header.Get("Authorization")
-	if strings.TrimSpace(authHeader) == "" {
-		logger.LogAttrs(ctx, slog.LevelError, "Missing Authorization header")
-		respondWithError(w, http.StatusUnauthorized, "Missing Authorization header")
-
-		return
-	}
-
-	token := strings.TrimPrefix(authHeader, "Bearer ")
-
-	userID, err := h.Service.ValidateTokens(ctx, token)
-	if err != nil {
-		logger.LogAttrs(ctx, slog.LevelError, "error while validating tokens", slog.String("error", err.Error()))
-		respondWithError(w, http.StatusBadRequest, fmt.Sprintf("error while validating tokens: %s", err.Error()))
-		return
-	}
-
-	writeData(w, http.StatusOK, userID.String())
-	logger.LogAttrs(ctx, slog.LevelInfo, "user validated", slog.String("userID", userID.String()))
-}
-
-// SignUp lets you store user email and password in database
-func (h *Handler) SignUp(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	logger := ctx.Value(server.Logger).(*slog.Logger)
-
+// SignUp registers a new user with email and password.
+func (h *Handler) SignUp(c *gofr.Context) (any, error) {
 	var u models.UserReq
 
-	if r.Body == nil {
-		respondWithError(w, http.StatusBadRequest, "missing request body")
-		return
+	if err := c.Bind(&u); err != nil {
+		return nil, err
 	}
 
-	if err := json.NewDecoder(r.Body).Decode(&u); err != nil {
-		respondWithError(w, http.StatusBadRequest, fmt.Sprintf("failed to bind body - %s", err.Error()))
-		return
+	if err := h.Service.SignUp(c, &u); err != nil {
+		return nil, err
 	}
 
-	defer func(body io.ReadCloser) { _ = body.Close() }(r.Body)
-
-	if err := h.Service.SignUp(ctx, &u); err != nil {
-		switch {
-		case models.ErrUserAlreadyExists.Is(err):
-			respondWithError(w, http.StatusConflict, fmt.Sprintf("failed to sign up - %s", err.Error()))
-			logger.LogAttrs(ctx, slog.LevelError, err.Error())
-
-			return
-
-		case errors.Is(err, models.ErrBadRequest(err)):
-			respondWithError(w, http.StatusBadRequest, err.Error())
-			logger.LogAttrs(ctx, slog.LevelError, err.Error())
-
-			return
-
-		default:
-			respondWithError(w, http.StatusInternalServerError, fmt.Sprintf("failed to sign up - %s", err.Error()))
-			logger.LogAttrs(ctx, slog.LevelError, err.Error())
-
-			return
-		}
-	}
-
-	writeData(w, http.StatusCreated, "user created successfully")
-	logger.LogAttrs(ctx, slog.LevelInfo, "user signed up successfully", slog.String("email", u.Email))
+	return "user created successfully", nil
 }
 
-// SignIn lets you authenticate user with user details and JWT token
-func (h *Handler) SignIn(w http.ResponseWriter, r *http.Request) {
+// SignIn authenticates a user and returns access + refresh tokens.
+func (h *Handler) SignIn(c *gofr.Context) (any, error) {
 	var u models.UserReq
 
-	ctx := r.Context()
-	logger := ctx.Value(server.Logger).(*slog.Logger)
-
-	if r.Body == nil {
-		respondWithError(w, http.StatusBadRequest, "Request body missing")
-		return
+	if err := c.Bind(&u); err != nil {
+		return nil, err
 	}
 
-	if err := json.NewDecoder(r.Body).Decode(&u); err != nil {
-		respondWithError(w, http.StatusBadRequest, fmt.Sprintf("failed to bind body - %s", err.Error()))
-		logger.LogAttrs(ctx, slog.LevelError, "failed to bind body", slog.String("error", err.Error()))
-
-		return
-	}
-
-	defer func(body io.ReadCloser) { _ = body.Close() }(r.Body)
-
-	tokenResp, err := h.Service.SignIn(ctx, &u)
+	tokenResp, err := h.Service.SignIn(c, &u)
 	if err != nil {
-		switch {
-		case errors.Is(err, models.ErrUserNotFound):
-			respondWithError(w, http.StatusNotFound, err.Error())
-			logger.LogAttrs(ctx, slog.LevelError, "user not found", slog.String("email", u.Email))
-
-			return
-
-		case errors.Is(err, models.ErrBadRequest(err)):
-			respondWithError(w, http.StatusBadRequest, err.Error())
-			logger.LogAttrs(ctx, slog.LevelError, err.Error())
-
-			return
-
-		default:
-			respondWithError(w, http.StatusInternalServerError, fmt.Sprintf("failed to sign up - %s", err.Error()))
-			logger.LogAttrs(ctx, slog.LevelError, err.Error())
-
-			return
-		}
+		// All auth failures return generic 401 to prevent user enumeration
+		return nil, err
 	}
 
-	resp := models.UserResp{
+	return models.UserResp{
 		Email:        u.Email,
 		AccessToken:  tokenResp.AccessToken,
 		RefreshToken: tokenResp.RefreshToken,
-	}
-
-	writeData(w, http.StatusCreated, resp)
-	logger.LogAttrs(ctx, slog.LevelInfo, "user signed in", slog.String("email", u.Email))
+	}, nil
 }
 
-func (h *Handler) RefreshToken(w http.ResponseWriter, r *http.Request) {
-	t := struct {
-		Token string `json:"refreshToken"`
-	}{}
-
-	ctx := r.Context()
-	logger := ctx.Value(server.Logger).(*slog.Logger)
-
-	authHeader := r.Header.Get("Authorization")
-	if authHeader == "" {
-		logger.LogAttrs(ctx, slog.LevelError, "Missing Authorization header")
-		respondWithError(w, http.StatusUnauthorized, "Missing Authorization header")
-
-		return
-	}
-
-	token := strings.TrimPrefix(authHeader, "Bearer ")
-
-	if err := json.NewDecoder(r.Body).Decode(&t); err != nil {
-		logger.LogAttrs(ctx, slog.LevelError, "failed to bind body", slog.String("error", err.Error()))
-		respondWithError(w, http.StatusBadRequest, fmt.Sprintf("failed to bind body - %s", err.Error()))
-
-		return
-	}
-
-	defer func(body io.ReadCloser) { _ = body.Close() }(r.Body)
-
-	tokenResp, err := h.Service.RefreshToken(ctx, token, t.Token)
+// RefreshToken issues a new token pair using a valid access + refresh token.
+func (h *Handler) RefreshToken(c *gofr.Context) (any, error) {
+	accessClaim, err := extractClaimFromCtx(c)
 	if err != nil {
-		respondWithError(w, http.StatusUnauthorized, fmt.Sprintf("failed to refresh token - %s", err.Error()))
-		logger.LogAttrs(ctx, slog.LevelError, err.Error())
-
-		return
+		return nil, err
 	}
 
-	userResp := models.UserResp{
+	var body struct {
+		Token string `json:"refreshToken"`
+	}
+
+	if err := c.Bind(&body); err != nil {
+		return nil, err
+	}
+
+	if strings.TrimSpace(body.Token) == "" {
+		return nil, err
+	}
+
+	tokenResp, err := h.Service.RefreshToken(c, accessClaim, body.Token)
+	if err != nil {
+		if errors.Is(err, models.ErrTokenRevoked{}) || errors.Is(err, models.ErrUnAuthorized{}) {
+			return nil, err
+		}
+
+		return nil, err
+	}
+
+	return models.UserResp{
 		AccessToken:  tokenResp.AccessToken,
 		RefreshToken: tokenResp.RefreshToken,
-	}
-
-	writeData(w, http.StatusOK, userResp)
-	logger.LogAttrs(ctx, slog.LevelInfo, "user refreshed token")
+	}, nil
 }
 
-func (h *Handler) RevokeToken(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	logger := ctx.Value(server.Logger).(*slog.Logger)
-
-	authHeader := r.Header.Get("Authorization")
-	if authHeader == "" {
-		logger.LogAttrs(ctx, slog.LevelError, "Missing Authorization header")
-		respondWithError(w, http.StatusUnauthorized, "Missing Authorization header")
-
-		return
-	}
-
-	token := strings.TrimPrefix(authHeader, "Bearer ")
-
-	if err := h.Service.RevokeToken(ctx, token); err != nil {
-		logger.LogAttrs(ctx, slog.LevelError, "failed to revoke token", slog.String("error", err.Error()))
-		respondWithError(w, http.StatusInternalServerError, "Failed to revoke token")
-
-		return
-	}
-
-	writeData(w, http.StatusNoContent, "token revoked successfully")
-	logger.LogAttrs(ctx, slog.LevelInfo, "revoked token")
-}
-
-func respondWithError(w http.ResponseWriter, code int, reason string) {
-	errHTTP := models.NewHTTPError(code, reason, "")
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(errHTTP.Code)
-
-	if err := json.NewEncoder(w).Encode(errHTTP); err != nil {
-		http.Error(w, "failed to write response", http.StatusInternalServerError)
-	}
-}
-
-func writeData[T any](w http.ResponseWriter, code int, resp T) {
-	w.WriteHeader(code)
-	w.Header().Set("Content-Type", "application/json")
-
-	data, err := json.Marshal(resp)
+// RevokeToken invalidates the provided access token (logout).
+func (h *Handler) RevokeToken(c *gofr.Context) (any, error) {
+	claim, err := extractClaimFromCtx(c)
 	if err != nil {
-		respondWithError(w, http.StatusServiceUnavailable, err.Error())
-		return
+		return nil, err
 	}
 
-	_, _ = w.Write(json.RawMessage(`{"data":` + string(data) + `}`))
+	if err := h.Service.RevokeToken(c, claim); err != nil {
+		return nil, err
+	}
+
+	return "token revoked successfully", nil
+}
+
+// Validate checks a JWT token and returns the associated userID.
+func (h *Handler) Validate(c *gofr.Context) (any, error) {
+	claims, err := extractClaimFromCtx(c)
+	if err != nil {
+		return nil, err
+	}
+
+	userID, err := h.Service.ValidateTokens(c, claims)
+	if err != nil {
+		return nil, err
+	}
+
+	return struct {
+		UserID uuid.UUID `json:"userId,omitempty"`
+	}{
+		UserID: *userID,
+	}, nil
+}
+
+func extractClaimFromCtx(c *gofr.Context) (*models.Claims, error) {
+	claims, ok := c.Value(models.CtxClaimKey).(*models.Claims)
+	if !ok {
+		return nil, gofrHTTP.ErrorEntityNotFound{Name: "context claim", Value: "nil"}
+	}
+
+	return claims, nil
 }
