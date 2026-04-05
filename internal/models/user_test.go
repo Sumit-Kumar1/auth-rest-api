@@ -1,8 +1,16 @@
 package models
 
 import (
-	"errors"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	gofrHTTP "gofr.dev/pkg/gofr/http"
+)
+
+const (
+	testMail   = "sumit@kumar.com"
+	testPass   = "Sumit@Kumar123"
+	testFailed = "Test[%d] failed - %s"
 )
 
 func TestUserReq_Validate(t *testing.T) {
@@ -11,17 +19,16 @@ func TestUserReq_Validate(t *testing.T) {
 		user    *UserReq
 		wantErr error
 	}{
-		{name: "valid case", user: &UserReq{Email: "sumit@kumar.com", Password: "sumit@kumar"}, wantErr: nil},
-		{name: "missing email", user: &UserReq{Email: "", Password: "sumit@kumar"}, wantErr: ErrRequired("email")},
-		{name: "missing password", user: &UserReq{Email: "sumit@kumar.com", Password: ""}, wantErr: ErrRequired("password")},
-		{name: "passwd len < 8", user: &UserReq{Email: "sumit@kumar.com", Password: "sumit"}, wantErr: ErrInvalid("password")},
+		{name: "valid case", user: &UserReq{Email: testMail, Password: testPass}, wantErr: nil},
+		{name: "missing email", user: &UserReq{Email: "", Password: testPass}, wantErr: gofrHTTP.ErrorMissingParam{Params: []string{emailStr}}},
+		{name: "missing password", user: &UserReq{Email: testMail, Password: ""}, wantErr: gofrHTTP.ErrorMissingParam{Params: []string{passwd}}},
+		{name: "passwd len < 8", user: &UserReq{Email: testMail, Password: "Sum1@K"}, wantErr: gofrHTTP.ErrorInvalidParam{Params: []string{passwdLenErr}}},
 	}
 
 	for i, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if err := tt.user.Validate(); err != nil && !errors.Is(err, tt.wantErr) {
-				t.Errorf("Test[%d] Failed - %s\nExp:%v\nGot:%v", i, tt.name, err, tt.wantErr)
-			}
+			err := tt.user.Validate()
+			assert.Equalf(t, tt.wantErr, err, testFailed, i, tt.name)
 		})
 	}
 }
@@ -32,16 +39,15 @@ func TestValidateEmail(t *testing.T) {
 		email   string
 		wantErr error
 	}{
-		{name: "valid csae", email: "sumit@kumar.com", wantErr: nil},
-		{name: "invalid email", email: "sumit@kumar", wantErr: ErrInvalid("email")},
-		{name: "invalid email", email: "", wantErr: ErrRequired("email")},
+		{name: "valid csae", email: testMail, wantErr: nil},
+		{name: "invalid email", email: "sumit@kumar", wantErr: gofrHTTP.ErrorInvalidParam{Params: []string{emailStr}}},
+		{name: "empty email", email: "", wantErr: gofrHTTP.ErrorMissingParam{Params: []string{emailStr}}},
 	}
 
 	for i, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if err := ValidateEmail(tt.email); tt.wantErr != nil && !errors.Is(err, tt.wantErr) {
-				t.Errorf("Test[%d] Failed - %s\nExp:%v\nGot:%v", i, tt.name, err, tt.wantErr)
-			}
+			err := ValidateEmail(tt.email)
+			assert.Equalf(t, tt.wantErr, err, testFailed, i, tt.name)
 		})
 	}
 }
@@ -52,15 +58,15 @@ func Test_validatePassword(t *testing.T) {
 		password string
 		wantErr  error
 	}{
-		{name: "valid case", password: "sumit@kumar", wantErr: nil},
-		{name: "passwd len < 8", password: "sumit", wantErr: ErrInvalid("password")},
-		{name: "missing password", password: "", wantErr: ErrRequired("password")},
+		{name: "valid case", password: testPass, wantErr: nil},
+		{name: "passwd len < 8", password: "sumit", wantErr: gofrHTTP.ErrorInvalidParam{Params: []string{passwdLenErr}}},
+		{name: "missing password", password: "", wantErr: gofrHTTP.ErrorMissingParam{Params: []string{passwd}}},
 	}
+
 	for i, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if err := validatePassword(tt.password); tt.wantErr != nil && !errors.Is(err, tt.wantErr) {
-				t.Errorf("Test[%d] Failed - %s\nExp:%v\nGot:%v", i, tt.name, err, tt.wantErr)
-			}
+			err := validatePassword(tt.password)
+			assert.Equalf(t, tt.wantErr, err, testFailed, i, tt.name)
 		})
 	}
 }

@@ -1,7 +1,7 @@
 package service
 
 import (
-	"encoding/json"
+	"errors"
 	"os"
 	"time"
 
@@ -11,51 +11,46 @@ import (
 	"github.com/google/uuid"
 )
 
-// Claims represents the custom claims for JWT tokens.
-// It extends the standard JWT claims with email and claim ID fields.
-type Claims struct {
-	Email    string `json:"email"`
-	ClaimUID string `json:"claimID"`
-	// registeredClaim's subject is userID from db
-	jwt.RegisteredClaims
-}
-
 // GenerateToken generates a new JWT token pair (access and refresh tokens).
 // It creates tokens with appropriate expiration times and unique IDs.
-// The access token expires in 15 minutes, while the refresh token lasts longer.
+// The access token expires in 15 minutes, while the refresh token expires in 24 hours.
 // Returns the token data or an error if token generation fails.
 func GenerateToken(idSub, email string) (*models.TokenData, error) {
 	accID := uuid.NewString()
 	refID := uuid.NewString()
-	jti := uuid.NewString()
+	accessJTI := uuid.NewString()
+	refreshJTI := uuid.NewString()
 
-	claims := Claims{
+	claims := models.Claims{
 		Email:    email,
 		ClaimUID: accID,
 		RegisteredClaims: jwt.RegisteredClaims{
-			Audience:  jwt.ClaimStrings{"todoapp"},
+			Audience:  jwt.ClaimStrings{"todo-app"},
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Minute * 15)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 			NotBefore: jwt.NewNumericDate(time.Now()),
-			Issuer:    "auth-rest-api",
+			Issuer:    "auth-api",
 			Subject:   idSub,
-			ID:        jti,
+			ID:        accessJTI,
 		},
 	}
 
 	refClaims := jwt.RegisteredClaims{
-		Audience:  jwt.ClaimStrings{"todoapp"},
-		ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Minute * 4)),
+		Audience:  jwt.ClaimStrings{"todo-app"},
+		ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour * 24)),
 		IssuedAt:  jwt.NewNumericDate(time.Now()),
-		Issuer:    "auth-rest-api",
+		Issuer:    "auth-api",
 		Subject:   idSub,
-		ID:        jti,
+		ID:        refreshJTI,
 	}
 
-	accessKey, refKey := getJWTSecrets()
+	accessKey, refKey, err := getJWTSecrets()
+	if err != nil {
+		return nil, err
+	}
 
 	accessToken := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	refToken := jwt.NewWithClaims(jwt.SigningMethodHS256, Claims{
+	refToken := jwt.NewWithClaims(jwt.SigningMethodHS256, models.Claims{
 		Email:            email,
 		ClaimUID:         refID,
 		RegisteredClaims: refClaims,
@@ -86,55 +81,58 @@ func GenerateToken(idSub, email string) (*models.TokenData, error) {
 // ParseToken validates and parses a JWT token.
 // It verifies the token signature and expiration time.
 // Returns the token claims or an error if the token is invalid.
-func ParseToken(tokenString, tokenType string) (*Claims, error) {
+func ParseToken(tokenString, tokenType string) (*models.Claims, error) {
 	var (
 		token *jwt.Token
 		err   error
 	)
 
-	accSecret, refSecret := getJWTSecrets()
+	accSecret, refSecret, err := getJWTSecrets()
+	if err != nil {
+		return nil, err
+	}
 
 	switch tokenType {
 	case "access":
-		token, err = jwt.ParseWithClaims(tokenString, &Claims{}, func(_ *jwt.Token) (any, error) {
+		token, err = jwt.ParseWithClaims(tokenString, &models.Claims{}, func(_ *jwt.Token) (any, error) {
 			return accSecret, nil
 		}, jwt.WithExpirationRequired(), jwt.WithStrictDecoding())
 	case "refresh":
-		token, err = jwt.ParseWithClaims(tokenString, &Claims{}, func(_ *jwt.Token) (any, error) {
+		token, err = jwt.ParseWithClaims(tokenString, &models.Claims{}, func(_ *jwt.Token) (any, error) {
 			return refSecret, nil
 		}, jwt.WithExpirationRequired(), jwt.WithStrictDecoding())
 	default:
-		return nil, models.ErrInvalid("token type")
+		return nil, models.ErrInvalidToken{}
 	}
 
 	if err != nil {
 		return nil, err
 	}
 
-	if claims, ok := token.Claims.(*Claims); ok && token.Valid {
+	if claims, ok := token.Claims.(*models.Claims); ok && token.Valid {
 		return claims, nil
 	}
 
 	if !token.Valid {
-		return nil, jwt.ErrSignatureInvalid
+		return nil, models.ErrInvalidToken{}
 	}
 
 	return nil, err
 }
 
 // getJWTSecrets retrieves the JWT signing secrets from environment variables.
-// It returns the access and refresh token secrets.
-// If environment variables are not set, it returns default values.
-func getJWTSecrets() (accessSecret, refreshSecret []byte) {
+// It returns the access and refresh token secrets, or an error if not configured.
+// Both ACCESS_SECRET and REFRESH_SECRET environment variables must be set.
+func getJWTSecrets() (accessSecret, refreshSecret []byte, err error) {
 	access := os.Getenv("ACCESS_SECRET")
 	if access == "" {
-		return json.RawMessage("my_secret_key"), json.RawMessage("my_refresh_secret_key")
+		return nil, nil, errors.New("ACCESS_SECRET environment variable is required")
 	}
 
 	refresh := os.Getenv("REFRESH_SECRET")
 	if refresh == "" {
-		return json.RawMessage("my_secret_key"), json.RawMessage("my_refresh_secret_key")
+		return nil, nil, errors.New("REFRESH_SECRET environment variable is required")
 	}
 
-	return json.RawMessage(access), json.RawMessage(refresh)
+	return []byte(access), []byte(refresh), nil
 }

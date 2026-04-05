@@ -1,14 +1,18 @@
 package service
 
 import (
-	"context"
-	"log/slog"
+	"errors"
 
 	"auth-rest-api/internal/models"
-	"auth-rest-api/internal/server"
 
 	"github.com/google/uuid"
+	"gofr.dev/pkg/gofr"
+	gofrHTTP "gofr.dev/pkg/gofr/http"
 	"golang.org/x/crypto/bcrypt"
+)
+
+const (
+	accessToken = "access token"
 )
 
 // Storer defines the interface for data storage operations.
@@ -16,12 +20,16 @@ import (
 //
 //go:generate mockgen -source=service.go -destination=mock_interface.go -package=service
 type Storer interface {
-	CreateUser(ctx context.Context, u *models.UserData) error
-	GetUserByEmail(ctx context.Context, email string) (*models.UserData, error)
+	CreateUser(ctx *gofr.Context, u *models.UserData) error
+	GetUserByEmail(ctx *gofr.Context, email string) (*models.UserData, error)
 
-	IsTokenRevoked(ctx context.Context, tokenID string) (bool, error)
-	CreateToken(ctx context.Context, email string, td *models.TokenData) error
-	DeleteToken(ctx context.Context, email, accTokenID, refTokenID string) error
+	IsTokenRevoked(ctx *gofr.Context, tokenID string) (bool, error)
+	CreateToken(ctx *gofr.Context, email string, td *models.TokenData) error
+	DeleteToken(ctx *gofr.Context, email, accTokenID, refTokenID string) error
+
+	IncrementFailedLogin(ctx *gofr.Context, email string) (int, error)
+	ResetFailedLogin(ctx *gofr.Context, email string) error
+	IsAccountLocked(ctx *gofr.Context, email string) (bool, error)
 }
 
 // Service represents the core business logic layer.
@@ -36,25 +44,22 @@ func New(s Storer) *Service {
 	return &Service{Store: s}
 }
 
-func (s *Service) SignUp(ctx context.Context, user *models.UserReq) error {
-	logger := ctx.Value(server.Logger).(*slog.Logger)
-
+func (s *Service) SignUp(ctx *gofr.Context, user *models.UserReq) error {
 	if user == nil {
-		logger.LogAttrs(ctx, slog.LevelError, "signup-service: empty user struct provided")
-		return models.ErrBadRequest(models.ErrInvalid("user input"))
+		return gofrHTTP.ErrorMissingParam{Params: []string{"email", "password"}}
 	}
 
 	if err := user.Validate(); err != nil {
-		return models.ErrBadRequest(err)
+		return err
 	}
 
 	exUser, err := s.Store.GetUserByEmail(ctx, user.Email)
-	if err != nil && !models.ErrUserNotFound.Is(err) {
+	if err != nil && !errors.Is(err, gofrHTTP.ErrorEntityNotFound{Name: "user", Value: user.Email}) {
 		return err
 	}
 
 	if exUser != nil {
-		return models.ErrUserAlreadyExists
+		return gofrHTTP.ErrorEntityAlreadyExist{}
 	}
 
 	hash, err := bcrypt.GenerateFromPassword([]byte(user.Password), 10)
@@ -75,26 +80,44 @@ func (s *Service) SignUp(ctx context.Context, user *models.UserReq) error {
 	return nil
 }
 
-func (s *Service) SignIn(ctx context.Context, user *models.UserReq) (*models.TokenResponse, error) {
-	logger := ctx.Value(server.Logger).(*slog.Logger)
-
+func (s *Service) SignIn(ctx *gofr.Context, user *models.UserReq) (*models.TokenResponse, error) {
 	if user == nil {
-		logger.LogAttrs(ctx, slog.LevelError, "empty user struct provided")
-		return nil, models.ErrBadRequest(models.ErrInvalid("user"))
+		return nil, gofrHTTP.ErrorMissingParam{Params: []string{"email", "password"}}
 	}
 
 	if valErr := user.Validate(); valErr != nil {
-		return nil, models.ErrBadRequest(valErr)
+		return nil, valErr
 	}
 
-	exUser, err := s.Store.GetUserByEmail(ctx, user.Email)
+	// Check if account is locked due to too many failed login attempts
+	isLocked, err := s.Store.IsAccountLocked(ctx, user.Email)
 	if err != nil {
 		return nil, err
 	}
 
+	if isLocked {
+		return nil, models.ErrAccountLocked{}
+	}
+
+	exUser, err := s.Store.GetUserByEmail(ctx, user.Email)
+	if err != nil {
+		// Increment failed login counter on user not found
+		s.Store.IncrementFailedLogin(ctx, user.Email)
+		return nil, err
+	}
+
 	if err = bcrypt.CompareHashAndPassword(exUser.Password, []byte(user.Password)); err != nil {
-		logger.LogAttrs(ctx, slog.LevelError, "wrong password")
-		return nil, models.ErrPasswordMismatch
+		// Increment failed login counter on password mismatch
+		if _, err := s.Store.IncrementFailedLogin(ctx, user.Email); err != nil {
+			return nil, err
+		}
+
+		return nil, models.ErrPasswordMismatch{}
+	}
+
+	// Reset failed login counter on successful login
+	if err := s.Store.ResetFailedLogin(ctx, user.Email); err != nil {
+		return nil, err
 	}
 
 	tokenData, err := GenerateToken(exUser.ID, exUser.Email)
@@ -112,10 +135,9 @@ func (s *Service) SignIn(ctx context.Context, user *models.UserReq) (*models.Tok
 	}, nil
 }
 
-func (s *Service) RefreshToken(ctx context.Context, accessToken, refreshToken string) (*models.TokenResponse, error) {
-	accessClaim, refreshClaim, err := s.tokenParsing(accessToken, refreshToken)
-	if err != nil {
-		return nil, err
+func (s *Service) RefreshToken(ctx *gofr.Context, accessClaim *models.Claims, refreshToken string) (*models.TokenResponse, error) {
+	if accessClaim == nil {
+		return nil, gofrHTTP.ErrorMissingParam{Params: []string{accessToken}}
 	}
 
 	// check if access token is revoked
@@ -125,7 +147,12 @@ func (s *Service) RefreshToken(ctx context.Context, accessToken, refreshToken st
 	}
 
 	if isRevoked {
-		return nil, models.ErrTokenRevoked
+		return nil, models.ErrTokenRevoked{}
+	}
+
+	refreshClaim, err := s.tokenParsing(refreshToken, "refresh")
+	if err != nil {
+		return nil, err
 	}
 
 	// Deleting old active tokens
@@ -143,18 +170,25 @@ func (s *Service) RefreshToken(ctx context.Context, accessToken, refreshToken st
 		return nil, err
 	}
 
-	return &models.TokenResponse{AccessToken: td.AccessToken,
-		RefreshToken: td.RefreshToken}, nil
+	return &models.TokenResponse{
+		AccessToken:  td.AccessToken,
+		RefreshToken: td.RefreshToken,
+	}, nil
 }
 
 // RevokeToken revokes the provided token, deletes stored token too
-func (s *Service) RevokeToken(ctx context.Context, token string) error {
-	logger := ctx.Value(server.Logger).(*slog.Logger)
+func (s *Service) RevokeToken(ctx *gofr.Context, accClaims *models.Claims) error {
+	if accClaims == nil {
+		return gofrHTTP.ErrorMissingParam{Params: []string{accessToken}}
+	}
 
-	accClaims, err := ParseToken(token, "access")
+	// Check if already revoked for idempotency
+	isRevoked, err := s.Store.IsTokenRevoked(ctx, accClaims.ClaimUID)
 	if err != nil {
-		logger.LogAttrs(ctx, slog.LevelError, "invalid access token", slog.String("error", err.Error()))
 		return err
+	}
+	if isRevoked {
+		return nil
 	}
 
 	if delErr := s.Store.DeleteToken(ctx, accClaims.Email, accClaims.ClaimUID, ""); delErr != nil {
@@ -164,16 +198,39 @@ func (s *Service) RevokeToken(ctx context.Context, token string) error {
 	return nil
 }
 
-func (s *Service) tokenParsing(accToken, refToken string) (access, refresh *Claims, err error) {
-	access, err = ParseToken(accToken, "access")
-	if err != nil {
-		return nil, nil, err
+func (s *Service) ValidateTokens(ctx *gofr.Context, accessClaim *models.Claims) (*uuid.UUID, error) {
+	if accessClaim == nil {
+		return nil, gofrHTTP.ErrorMissingParam{Params: []string{accessToken}}
 	}
 
-	refresh, err = ParseToken(refToken, "refresh")
+	// Check if token has been revoked
+	isRevoked, err := s.Store.IsTokenRevoked(ctx, accessClaim.ClaimUID)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
-	return
+	if isRevoked {
+		return nil, models.ErrTokenRevoked{}
+	}
+
+	sub := accessClaim.Subject
+	if sub == "" {
+		return nil, models.ErrInvalidToken{}
+	}
+
+	uid, err := uuid.Parse(sub)
+	if err != nil {
+		return nil, err
+	}
+
+	return &uid, nil
+}
+
+func (s *Service) tokenParsing(token, tokenType string) (*models.Claims, error) {
+	claim, err := ParseToken(token, tokenType)
+	if err != nil {
+		return nil, err
+	}
+
+	return claim, nil
 }
