@@ -20,7 +20,7 @@ func TestUserReq_Validate(t *testing.T) {
 		wantErr error
 	}{
 		{name: "valid case", user: &UserReq{Email: testMail, Password: testPass}, wantErr: nil},
-		{name: "missing email", user: &UserReq{Email: "", Password: testPass}, wantErr: gofrHTTP.ErrorInvalidParam{Params: []string{emailStr}}},
+		{name: "missing email", user: &UserReq{Email: "", Password: testPass}, wantErr: gofrHTTP.ErrorMissingParam{Params: []string{emailStr}}},
 		{name: "missing password", user: &UserReq{Email: testMail, Password: ""}, wantErr: gofrHTTP.ErrorMissingParam{Params: []string{passwd}}},
 		{name: "passwd len < 8", user: &UserReq{Email: testMail, Password: "Sum1@K"}, wantErr: gofrHTTP.ErrorInvalidParam{Params: []string{passwdLenErr}}},
 	}
