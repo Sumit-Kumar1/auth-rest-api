@@ -66,7 +66,8 @@ NOTE:
 
 - See [API specification](./openapi/auth-rest-api.yaml)
 
-- Register a new user (change email & password value as needed): `curl --location 'http://localhost:9001/signup' --header 'Content-Type: application/json' --data-raw '{ "email":"sumit@kumar.com", "password":"sumit@kumar" }'`
+- Register a new user (change email & password value as needed):
+ ```curl --location 'http://localhost:9001/signup' --header 'Content-Type: application/json' --data-raw '{ "email":"sumit@kumar.com", "password":"sumit@kumar" }'```
 
 - Login to get JWT token: `curl --location 'http://localhost:9001/signin' --header 'Content-Type: application/json' --data-raw '{"email":"sumit@kumar.com", "password":"sumit@kumar"}'`
 

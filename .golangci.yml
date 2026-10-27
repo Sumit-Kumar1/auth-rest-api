@@ -32,6 +32,7 @@ linters:
     - unparam
     - unused
     - whitespace
+    - sloglint
   settings:
     gocyclo:
       min-complexity: 10
@@ -63,6 +64,10 @@ linters:
     funlen:
       lines: 100
       statements: 65
+    sloglint:
+      attr-only: true
+      context: "all"
+      no-mixed-args: true
   exclusions:
     warn-unused: false
     rules:

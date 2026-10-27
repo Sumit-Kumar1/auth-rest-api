@@ -4,7 +4,7 @@
 GOCMD=go
 GOBUILD=$(GOCMD) build
 GOCLEAN=$(GOCMD) clean
-GOTEST=$(GOCMD) test
+GOTEST=$(GOCMD)testsum
 GOGET=$(GOCMD) get
 BINARY_NAME=auth-rest-api
 BINARY_UNIX=$(BINARY_NAME)_unix
@@ -12,10 +12,10 @@ BINARY_UNIX=$(BINARY_NAME)_unix
 all: test build
 
 build:
-	$(GOBUILD) -o $(BINARY_NAME) -v ./cmd/main.go
+	$(GOBUILD) -o $(BINARY_NAME) -v ./main.go
 
 test:
-	$(GOTEST) -v -race -cover ./...
+	$(GOTEST) -- -count=1 -cover ./... 
 
 lint:
 	golangci-lint run ./...
@@ -25,10 +25,9 @@ clean:
 	rm -f $(BINARY_NAME)
 	rm -f $(BINARY_UNIX)
 
-run:
-	$(GOBUILD) -o $(BINARY_NAME) -v ./cmd/main.go
-	./$(BINARY_NAME)
-
+run: build
+	@./$(BINARY_NAME)
+	
 docker-build:
 	docker build -t $(BINARY_NAME) .
 

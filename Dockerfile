@@ -1,4 +1,4 @@
-FROM golang:1.25-alpine AS builder
+FROM golang:1.27-alpine AS builder
 WORKDIR /auth-rest-api
 
 COPY internal/ ./internal
@@ -7,7 +7,7 @@ COPY go.mod go.sum main.go ./
 RUN go mod download && \
   CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s -extldflags '-static'" -o main .
 
-FROM alpine:3.22 AS production
+FROM alpine:3.24 AS production
 
 RUN apk --no-cache add ca-certificates && \
   addgroup -S appgroup && adduser -S appuser -G appgroup

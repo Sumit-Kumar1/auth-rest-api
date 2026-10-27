@@ -33,3 +33,5 @@ go.work.sum
 secrets/
 .env
 .DS_Store
+.sonarlint/
+auth-rest-api
